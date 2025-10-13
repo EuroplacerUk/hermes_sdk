@@ -35,9 +35,6 @@
     <Filter Include="VerticalClient">
       <UniqueIdentifier>{3a3fc53b-b1ec-4d42-9082-17db5afd9423}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Pugixml">
-      <UniqueIdentifier>{2c66b745-fc16-4ca7-937b-d360d6105e07}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -148,6 +145,12 @@
     <ClInclude Include="..\..\version\resource.h">
       <Filter>Service</Filter>
     </ClInclude>
+    <ClInclude Include="boost_win32_patch.hpp">
+      <Filter>NetworkCommunication</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\HermesVersion.h">
+      <Filter>Public</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -228,8 +231,8 @@
     <ClCompile Include="VerticalClient.cpp">
       <Filter>VerticalClient</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\References\pugixml\pugixml.cpp">
-      <Filter>Pugixml</Filter>
-    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

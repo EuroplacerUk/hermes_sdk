@@ -31,7 +31,7 @@ limitations under the License.
 # define HERMESPROTOCOL_API
 #endif //_WINDOWS
 
-#define HERMES_VERSION "1.6"
+#include "HermesVersion.h"
 
 #include "HermesData.h"
 

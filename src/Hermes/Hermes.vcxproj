@@ -77,28 +77,32 @@
     <LinkIncremental>true</LinkIncremental>
     <OutDir>..\..\bin\$(PlatformTarget)\$(Configuration)\</OutDir>
     <IntDir>..\..\tmp\$(ProjectName)_$(Configuration)_$(PlatformTarget)\</IntDir>
+    <Linkage-pugixml>static</Linkage-pugixml>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>..\..\bin\$(PlatformTarget)\$(Configuration)\</OutDir>
     <IntDir>..\..\tmp\$(ProjectName)_$(Configuration)_$(PlatformTarget)\</IntDir>
+    <Linkage-pugixml>static</Linkage-pugixml>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>..\..\bin\$(PlatformTarget)\$(Configuration)\</OutDir>
     <IntDir>..\..\tmp\$(ProjectName)_$(Configuration)_$(PlatformTarget)\</IntDir>
+    <Linkage-pugixml>static</Linkage-pugixml>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>..\..\bin\$(PlatformTarget)\$(Configuration)\</OutDir>
     <IntDir>..\..\tmp\$(ProjectName)_$(Configuration)_$(PlatformTarget)\</IntDir>
+    <Linkage-pugixml>static</Linkage-pugixml>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>HERMES_LIB;_DEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;_DEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)\..\..\References; $(ProjectDir)\..\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalOptions>/Zc:threadSafeInit-</AdditionalOptions>
@@ -117,7 +121,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>HERMES_LIB;_DEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;_DEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)\..\..\References; $(ProjectDir)\..\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalOptions>/Zc:threadSafeInit-</AdditionalOptions>
@@ -135,7 +139,7 @@
       <WarningLevel>Level4</WarningLevel>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <Optimization>MaxSpeed</Optimization>
-      <PreprocessorDefinitions>HERMES_LIB;NDEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;NDEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)\..\..\References; $(ProjectDir)\..\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <AdditionalOptions>/Zc:threadSafeInit-</AdditionalOptions>
@@ -157,7 +161,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>HERMES_LIB;NDEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;NDEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)\..\..\References; $(ProjectDir)\..\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <AdditionalOptions>/Zc:threadSafeInit-</AdditionalOptions>
@@ -184,8 +188,10 @@
     <ClInclude Include="..\include\HermesSerialization.hpp" />
     <ClInclude Include="..\include\HermesStringView.h" />
     <ClInclude Include="..\include\HermesStringView.hpp" />
+    <ClInclude Include="..\include\HermesVersion.h" />
     <ClInclude Include="ApiCallback.h" />
     <ClInclude Include="BasicPugiSerialization.h" />
+    <ClInclude Include="boost_win32_patch.hpp" />
     <ClInclude Include="ConfigurationServiceSerializer.h" />
     <ClInclude Include="ConfigurationServiceSession.h" />
     <ClInclude Include="DeserializationHelpers.h" />
@@ -211,12 +217,6 @@
     <ClInclude Include="VerticalServiceSession.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\References\pugixml\pugixml.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-    </ClCompile>
     <ClCompile Include="AsioClient.cpp" />
     <ClCompile Include="AsioServer.cpp" />
     <ClCompile Include="ConfigurationClient.cpp" />
@@ -249,7 +249,19 @@
     <ClCompile Include="VerticalServiceSerializer.cpp" />
     <ClCompile Include="VerticalServiceSession.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="..\packages\pugixml.1.15.0\build\native\pugixml.targets" Condition="Exists('..\packages\pugixml.1.15.0\build\native\pugixml.targets')" />
+    <Import Project="..\packages\boost.1.86.0\build\boost.targets" Condition="Exists('..\packages\boost.1.86.0\build\boost.targets')" />
   </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\pugixml.1.15.0\build\native\pugixml.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\pugixml.1.15.0\build\native\pugixml.targets'))" />
+    <Error Condition="!Exists('..\packages\boost.1.86.0\build\boost.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\boost.1.86.0\build\boost.targets'))" />
+  </Target>
 </Project>

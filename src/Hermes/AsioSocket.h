@@ -26,6 +26,7 @@ limitations under the License.
 #include <HermesData.hpp>
 
 #include <boost/asio.hpp>
+#include "boost_win32_patch.hpp"
 
 #include <memory>
 
@@ -36,7 +37,9 @@ namespace Hermes
     template<class... Ts>
     Error Alarm(IAsioService& service, unsigned sessionId, const boost::system::error_code& ec, const Ts&... trace)
     {
-        return service.Alarm(sessionId, EErrorCode::eNETWORK_ERROR, trace..., ": ", ec.message(), '(', ec.value(), ')');
+        //This fixes an issue with UTF-8 in Windows leading to garbled error messages
+        auto msg = boost_patch::ErrorMessageKludge(ec);
+        return service.Alarm(sessionId, EErrorCode::eNETWORK_ERROR, trace..., ": ", msg, '(', ec.value(), ')');
     }
 
     template<class... Ts>

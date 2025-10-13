@@ -2,11 +2,7 @@
 
 #include <HermesData.hpp>
 
-#ifdef _WINDOWS
-#include "pugixml/pugixml.hpp"
-#else
-#include "pugixml.hpp"
-#endif
+#include <pugixml.hpp>
 
 #include <string>
 

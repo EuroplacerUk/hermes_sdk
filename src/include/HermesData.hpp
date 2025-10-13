@@ -6,6 +6,7 @@
 
 #include "HermesOptional.hpp"
 #include "HermesStringView.hpp"
+#include "HermesVersion.h"
 
 #include <string>
 #include <type_traits>

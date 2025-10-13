@@ -2,11 +2,7 @@
 
 #include <HermesStringView.hpp>
 
-#ifdef _WINDOWS
-#include "pugixml/pugixml.hpp"
-#else
-#include "pugixml.hpp"
-#endif
+#include <pugixml.hpp>
 
 namespace Hermes
 {
