@@ -23,7 +23,8 @@ static const uint16_t cACTION_UNDEFINED = 1U; // The Hermes Standard 3.6
 static const uint16_t cACTION_PROCESS_BOARD = 1U; // The Hermes Standard 3.6
 static const uint16_t cACTION_PASS_THROUGH_BOARD = 2U; // The Hermes Standard 3.6
 
-
+
+
 //========== The Hermes Standard 3.3 ==========
 enum class ECheckAliveType
 {
@@ -495,7 +496,7 @@ struct ServiceDescriptionData
     std::string m_machineId;
     unsigned m_laneId{0};
     Optional<std::string> m_optionalInterfaceId;
-    std::string m_version{"1.5"};
+    std::string m_version{HERMES_VERSION};
     SupportedFeatures m_supportedFeatures;
 
     ServiceDescriptionData() = default;
@@ -1318,7 +1319,7 @@ struct SupervisoryFeatures
 struct SupervisoryServiceDescriptionData
 {
     std::string m_systemId;
-    std::string m_version{"1.5"};
+    std::string m_version{HERMES_VERSION};
     SupervisoryFeatures m_supportedFeatures;
 
     SupervisoryServiceDescriptionData() = default;
