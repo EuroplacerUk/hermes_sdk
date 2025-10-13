@@ -254,7 +254,21 @@ struct HermesVerticalClient : ISessionCallback
         m_disconnectedCallback(sessionId, ToC(state), converter.CPointer());
     }
 
+    void Reset()
+    {
+        RemoveSession_();
+        DelayCreateNewSession_(1.0);
+    }
+
+    void Reset(const NotificationData& data)
+    {
+        RemoveSession_(data);
+        DelayCreateNewSession_(1.0);
+    }
+
     //============ internal impplementation ==============
+    private:
+
     Session* Session_(unsigned id)
     {
         if (m_upSession && m_upSession->Id() == id)
@@ -434,8 +448,7 @@ void ResetHermesVerticalClient(HermesVerticalClient* pVerticalClient, const Herm
 
     pVerticalClient->m_service.Post([pVerticalClient, data = ToCpp(*pData)]()
     {
-        pVerticalClient->RemoveSession_(data);
-        pVerticalClient->DelayCreateNewSession_(1.0);
+        pVerticalClient->Reset(data);
     });
 }
 
@@ -503,7 +516,6 @@ void ResetHermesVerticalClientRawXml(HermesVerticalClient* pVerticalClient, Herm
         {
             pVerticalClient->m_upSession->Signal(NotificationData(), data);
         }
-        pVerticalClient->RemoveSession_();
-        pVerticalClient->DelayCreateNewSession_(1.0);
+        pVerticalClient->Reset();
     });
 }

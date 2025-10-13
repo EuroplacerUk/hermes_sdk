@@ -140,6 +140,8 @@ namespace Hermes
         }
 
         // internals
+    private:
+
         void Listen_()
         {
             if (m_spResources->m_closed)

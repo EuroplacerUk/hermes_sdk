@@ -79,6 +79,8 @@ namespace Hermes
         }
 
         //================= implementation ===============================
+    private:
+
         std::shared_ptr<ClientSocket> shared_from_this()
         {
             return std::shared_ptr<ClientSocket>(m_socket.m_wpOwner.lock(), this);

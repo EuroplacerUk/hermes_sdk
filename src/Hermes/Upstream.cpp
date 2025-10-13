@@ -266,7 +266,21 @@ struct HermesUpstream : ISessionCallback
         m_disconnectedCallback(sessionId, ToC(state), converter.CPointer());
     }
 
+    void Reset(const NotificationData& data)
+    {
+        RemoveSession_(data);
+        DelayCreateNewSession_(1.0);
+    }
+
+    void Reset()
+    {
+        RemoveSession_();
+        DelayCreateNewSession_(1.0);
+    }
+
     //============ internal impplementation ==============
+    private:
+
     Session* Session_(unsigned id)
     {
         if (m_upSession && m_upSession->Id() == id)
@@ -468,8 +482,7 @@ void ResetHermesUpstream(HermesUpstream* pUpstream, const HermesNotificationData
 
     pUpstream->m_service.Post([pUpstream, data = ToCpp(*pData)]()
     {
-        pUpstream->RemoveSession_(data);
-        pUpstream->DelayCreateNewSession_(1.0);
+        pUpstream->Reset(data);
     });
 }
 
@@ -508,8 +521,7 @@ void ResetHermesUpstreamRawXml(HermesUpstream* pUpstream, HermesStringView rawXm
         {
             pUpstream->m_upSession->Signal(NotificationData(), data);
         }
-        pUpstream->RemoveSession_();
-        pUpstream->DelayCreateNewSession_(1.0);
+        pUpstream->Reset();
     });
 }
 

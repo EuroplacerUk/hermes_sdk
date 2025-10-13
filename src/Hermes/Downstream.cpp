@@ -295,7 +295,19 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         m_disconnectedCallback(sessionId, eHERMES_STATE_DISCONNECTED, converter.CPointer());
     }
 
+    void Reset(const NotificationData& data)
+    {
+        RemoveCurrentSession_(data);
+    }
+
+    void Reset()
+    {
+        RemoveCurrentSession_();
+    }
+
     //=================== internal =========================
+    private:
+
     Session* Session_(unsigned id)
     {
         if (m_upSession && m_upSession->Id() == id)
@@ -453,7 +465,7 @@ void ResetHermesDownstream(HermesDownstream* pDownstream, const HermesNotificati
     pDownstream->m_service.Log(0U, "ResetHermesDownstream");
     pDownstream->m_service.Post([pDownstream, data = ToCpp(*pData)]()
     {
-        pDownstream->RemoveCurrentSession_(data);
+        pDownstream->Reset(data);
     });
 }
 
@@ -492,7 +504,7 @@ void ResetHermesDownstreamRawXml(HermesDownstream* pDownstream, HermesStringView
         {
             pDownstream->m_upSession->Signal(NotificationData(), data);
         }
-        pDownstream->RemoveCurrentSession_();
+        pDownstream->Reset();
     });
 }
 
