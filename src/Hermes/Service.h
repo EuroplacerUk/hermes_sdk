@@ -30,8 +30,8 @@ namespace Hermes
 {
     struct Service : IAsioService
     {
-        asio::io_service m_asioService;
-        asio::io_service::work m_asioWork{m_asioService};
+        asio::io_context m_asioService;
+        asio::executor_work_guard<asio::io_context::executor_type> m_asioWork{asio::make_work_guard(m_asioService) };
         ApiCallback<HermesTraceCallback> m_traceCallback;
 
         explicit Service(HermesTraceCallback traceCallback) :
@@ -43,11 +43,15 @@ namespace Hermes
 
         void Run()
         {
-            boost::system::error_code ec;
-            m_asioService.run(ec);
-            if (!ec)
-                return;
-            Trace(ETraceType::eERROR, 0U, BuildString("m_asioService.Run: ", ec.message()));
+            try
+            {
+                m_asioService.run();
+            }
+            catch (const boost::system::system_error& err)
+            {
+                Trace(ETraceType::eERROR, 0U, BuildString("m_asioService.Run: ", err.what()));
+            }
+            
         }
 
         void Stop()
@@ -58,7 +62,7 @@ namespace Hermes
         //============== IAsioService ==========================
         void Post(std::function<void()>&& f) override
         {
-            m_asioService.post(std::move(f));
+            asio::post(m_asioService, std::move(f));
         }
 
         void Trace(ETraceType type, unsigned sessionId, StringView trace) override
@@ -66,7 +70,7 @@ namespace Hermes
             m_traceCallback(sessionId, ToC(type), ToC(trace));
         }
 
-        boost::asio::io_service& GetUnderlyingService() override
+        boost::asio::io_context& GetUnderlyingService() override
         {
             return m_asioService;
         }

@@ -22,6 +22,7 @@ limitations under the License.
 #include "MessageDispatcher.h"
 #include "Service.h"
 #include "StringBuilder.h"
+#include "HermesChrono.hpp"
 
 #include <boost/asio.hpp>
 
@@ -46,7 +47,7 @@ namespace
         std::string m_traceName;
         std::string m_hostName;
         Service m_service;
-        asio::io_service& m_asioService{m_service.GetUnderlyingService()};
+        asio::io_context& m_asioService{m_service.GetUnderlyingService()};
         asio::ip::tcp::socket m_socket{m_asioService};
         MessageDispatcher m_dispatcher{0U, m_service};
 
@@ -102,30 +103,33 @@ namespace
         bool Connect()
         {
             asio::ip::tcp::resolver resolver(m_asioService);
-            asio::ip::tcp::resolver::query query(asio::ip::tcp::v4(), m_hostName, "");
 
             boost::system::error_code ec;
-            auto itEndpoint = resolver.resolve(query, ec);
+            auto epResults = resolver.resolve(asio::ip::tcp::v4(), m_hostName, "", ec);
             if (ec)
             {
                 GenerateError(EErrorCode::eNETWORK_ERROR, "asio::resolve: ", ec.message());
                 return false;
             }
 
+            auto itEndpoint = epResults.cbegin();
             asio::ip::tcp::endpoint endpoint(*itEndpoint);
             endpoint.port(cCONFIG_PORT);
             boost::system::error_code ecConnect = asio::error::would_block; // can never be returned from an async function
-            asio::deadline_timer receiveTimer{m_asioService};
-            receiveTimer.expires_from_now(boost::posix_time::seconds(m_timeoutInSeconds));
+            asio::system_timer receiveTimer{m_asioService};
+            receiveTimer.expires_after(Hermes::GetSeconds(m_timeoutInSeconds));
             receiveTimer.async_wait([](const boost::system::error_code&) {}); // leaves ecAccept as is
             m_socket.async_connect(endpoint, [&](boost::system::error_code in_ec) 
             { 
                 ecConnect = in_ec; 
             });
-            m_asioService.run_one(ec);
-            if (ec)
+            try
             {
-                GenerateError(EErrorCode::eIMPLEMENTATION_ERROR, "asio::run_one: ", ec.message());
+                m_asioService.run_one();
+            }
+            catch(const boost::system::system_error& err)
+            {
+                GenerateError(EErrorCode::eIMPLEMENTATION_ERROR, "asio::run_one: ", err.what());
                 return false;
             }
 
@@ -161,8 +165,8 @@ namespace
             m_receiving = true;
 
             // parallel to receiving, run the timer:
-            asio::deadline_timer receiveTimer{m_asioService};
-            receiveTimer.expires_from_now(boost::posix_time::seconds(m_timeoutInSeconds));
+            asio::system_timer receiveTimer{m_asioService};
+            receiveTimer.expires_after(Hermes::GetSeconds(m_timeoutInSeconds));
             receiveTimer.async_wait([&](const boost::system::error_code&)
             {
                 if (!m_receiving)
@@ -178,11 +182,15 @@ namespace
                 {
                     OnAsyncReceive_(ecReceive, size);
                 });
-                m_asioService.reset();
-                boost::system::error_code ecRun;
-                m_asioService.run_one(ecRun);
-                if (ecRun)
-                    return GenerateError(EErrorCode::eNETWORK_ERROR, "asio::run_one", ecRun.message());
+                m_asioService.restart();
+                try
+                {
+                    m_asioService.run_one();
+                }
+                catch (const boost::system::system_error& err)
+                {
+                    return GenerateError(EErrorCode::eNETWORK_ERROR, "asio::run_one", err.what());
+                }
             }
         }
 

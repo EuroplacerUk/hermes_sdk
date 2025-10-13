@@ -22,6 +22,7 @@ limitations under the License.
 #include "Network.h"
 #include "MessageSerialization.h"
 #include "StringBuilder.h"
+#include "HermesChrono.hpp"
 
 #include <HermesData.hpp>
 
@@ -54,9 +55,9 @@ namespace Hermes
         std::weak_ptr<void> m_wpOwner;
         IAsioService& m_service;
         std::array<char, 1024> m_receivedData;
-        asio::io_service& m_asioService{m_service.GetUnderlyingService()};
+        asio::io_context& m_asioService{m_service.GetUnderlyingService()};
         asio::ip::tcp::socket m_socket{m_asioService};
-        asio::deadline_timer m_timer{m_asioService};
+        asio::system_timer m_timer{m_asioService};
         ISocketCallback* m_pCallback{nullptr};
         NetworkConfiguration m_configuration;
         ConnectionInfo m_connectionInfo;
@@ -152,7 +153,11 @@ namespace Hermes
             boost::system::error_code ecDummy;
             m_socket.shutdown(asio::socket_base::shutdown_both, ecDummy);
             m_socket.close(ecDummy);
-            m_timer.cancel(ecDummy);
+            try
+            {
+                m_timer.cancel();
+            }
+            catch (const boost::system::system_error&) {}
 
             auto* pCallback = m_pCallback;
             m_pCallback = nullptr;
@@ -209,7 +214,7 @@ namespace Hermes
             if (!m_configuration.m_checkAlivePeriodInSeconds)
                 return;
 
-            m_timer.expires_from_now(boost::posix_time::milliseconds(static_cast<int>(1000.0 * m_configuration.m_checkAlivePeriodInSeconds)));
+            m_timer.expires_after(Hermes::GetSeconds(m_configuration.m_checkAlivePeriodInSeconds));
             m_timer.async_wait([spThis = shared_from_this()](const boost::system::error_code& ec)
             {
                 spThis->OnCheckAliveTrigger_(ec);

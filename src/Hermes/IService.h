@@ -27,19 +27,13 @@ limitations under the License.
 
 #include <boost/asio.hpp>
 
-/*namespace boost causes compile errors with Linux -> remove or encapsulate with #ifdef _WINDOWS?
-{
-    namespace asio { class io_context; using io_service = io_context; }
-}*/
-
-
 namespace Hermes
 {
     struct IAsioService
     {
         virtual void Post(std::function<void()>&&) = 0;
         virtual void Trace(ETraceType, unsigned sessionId, StringView trace) = 0;
-        virtual boost::asio::io_service& GetUnderlyingService() = 0;
+        virtual boost::asio::io_context& GetUnderlyingService() = 0;
 
         template<class... Ts>
         void Log(unsigned sessionId, const Ts&... params)

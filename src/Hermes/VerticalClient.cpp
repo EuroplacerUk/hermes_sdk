@@ -21,6 +21,7 @@ limitations under the License.
 #include "MessageDispatcher.h"
 #include "Service.h"
 #include "VerticalClientSession.h"
+#include "HermesChrono.hpp"
 
 #include <cassert>
 #include <memory>
@@ -31,7 +32,7 @@ using namespace Hermes::VerticalClient;
 struct HermesVerticalClient : ISessionCallback
 {
     Service m_service;
-    asio::deadline_timer m_timer{ m_service.GetUnderlyingService() };
+    asio::system_timer m_timer{ m_service.GetUnderlyingService() };
     VerticalClientSettings m_settings;
 
     unsigned m_sessionId{ 0U };
@@ -313,7 +314,7 @@ struct HermesVerticalClient : ISessionCallback
     {
         m_service.Log(0U, "DelayCreateNewSession_");
 
-        m_timer.expires_from_now(boost::posix_time::millisec(static_cast<int>(1000.0 * delay)));
+        m_timer.expires_after(Hermes::GetSeconds(delay));
         m_timer.async_wait([this](const boost::system::error_code& ec)
         {
             if (ec) // timer cancelled or whatever

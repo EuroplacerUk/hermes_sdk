@@ -19,6 +19,7 @@ limitations under the License.
 #include "IService.h"
 #include "MessageSerialization.h"
 #include "StringBuilder.h"
+#include "HermesChrono.hpp"
 
 #include <HermesData.hpp>
 
@@ -65,7 +66,7 @@ namespace Hermes
         {
             m_spSocket->m_wpOwner = std::move(wpOwner);
             m_spSocket->m_pCallback = &callback;
-            m_spSocket->m_asioService.post([spSocket = m_spSocket]()
+            asio::post(m_spSocket->m_asioService, [spSocket = m_spSocket]()
             {
                 if (spSocket->Closed())
                     return;
@@ -87,11 +88,11 @@ namespace Hermes
 
     struct AcceptorResources
     {
-        asio::deadline_timer m_timer;
+        asio::system_timer m_timer;
         asio::ip::tcp::acceptor m_acceptor;
         bool m_closed = false;
 
-        AcceptorResources(asio::io_service& asioService) :
+        AcceptorResources(asio::io_context& asioService) :
             m_timer(asioService),
             m_acceptor(asioService)
         {}
@@ -101,7 +102,7 @@ namespace Hermes
     {
         unsigned m_sessionId = 1U;
         IAsioService& m_service;
-        asio::io_service& m_asioService{m_service.GetUnderlyingService()};
+        asio::io_context& m_asioService{m_service.GetUnderlyingService()};
         Optional<NetworkConfiguration> m_optionalConfiguration;
         IAcceptorCallback& m_callback;
         std::shared_ptr<AcceptorResources> m_spResources{std::make_shared<AcceptorResources>(m_asioService)};
@@ -153,13 +154,12 @@ namespace Hermes
 
             if (!m_optionalConfiguration->m_hostName.empty())
             {
-                asio::ip::tcp::resolver resolver(m_asioService);
-                asio::ip::tcp::resolver::query query(asio::ip::tcp::v4(), configuration.m_hostName, "");
+                asio::ip::tcp::resolver resolver(m_asioService);               
                 boost::system::error_code ec;
-                resolver.resolve(query, ec);
+                resolver.resolve(asio::ip::tcp::v4(), configuration.m_hostName, "", ec);
                 if (ec)
                 {
-                    Alarm(ec, "Unable to resolve ", query.host_name());
+                    Alarm(ec, "Unable to resolve ", configuration.m_hostName);
                     RetryLater_();
                     return;
                 }
@@ -193,7 +193,7 @@ namespace Hermes
                 return;
             }
 
-            m_spResources->m_acceptor.listen(asio::socket_base::max_connections, ec);
+            m_spResources->m_acceptor.listen(asio::socket_base::max_listen_connections, ec);
             if (ec)
             {
                 Alarm(ec, "Unable to listen on accept port ", configuration.m_port);
@@ -267,13 +267,14 @@ namespace Hermes
             spSocket->m_connectionInfo.m_address = remoteAddress.to_string();
 
             // try and resolve the remote address to a name:
-            auto itResolved = resolver.resolve(endpoint, ecResolve);
+            auto resolveResults = resolver.resolve(endpoint, ecResolve);
             if (ec)
             {
                 spSocket->Alarm(ec, "Unable to resolve ip address ", endpoint);
             }
             else
             {
+                auto itResolved = resolveResults.cbegin();
                 spSocket->m_connectionInfo.m_hostName = itResolved->host_name();
             }
 
@@ -281,11 +282,10 @@ namespace Hermes
 
             if (!configuration.m_hostName.empty())
             {
-                asio::ip::tcp::resolver::query query(asio::ip::tcp::v4(), configuration.m_hostName, "");
-                auto itAllowedEndpoint = resolver.resolve(query, ecResolve);
+                auto results = resolver.resolve(asio::ip::tcp::v4(), configuration.m_hostName, "", ecResolve);
                 if (ecResolve)
                 {
-                    spSocket->Alarm(ec, "Unable to resolve ", query.host_name());
+                    spSocket->Alarm(ec, "Unable to resolve ", configuration.m_hostName);
                     NotificationData notification(ENotificationCode::eCONFIGURATION_ERROR, ESeverity::eERROR,
                         "Connection only allowed from a hostname which cannot be resolved: " + configuration.m_hostName);
                     const std::string& xmlString = Serialize(notification);
@@ -295,6 +295,7 @@ namespace Hermes
                     return;
                 }
 
+                auto itAllowedEndpoint = results.cbegin();
                 const auto& allowedEndpoint = itAllowedEndpoint->endpoint();
                 const auto& allowedAddress = allowedEndpoint.address();
                 if (remoteAddress != allowedAddress)
@@ -334,7 +335,8 @@ namespace Hermes
             boost::system::error_code ecDummy;
             m_spResources->m_acceptor.close(ecDummy);
 
-            m_spResources->m_timer.expires_from_now(boost::posix_time::milliseconds(static_cast<int>(1000.0 * configuration.m_retryDelayInSeconds)));
+            
+            m_spResources->m_timer.expires_after(Hermes::GetSeconds(configuration.m_retryDelayInSeconds));
             m_spResources->m_timer.async_wait([this, spResources = m_spResources](const boost::system::error_code& ec)
             {
                 if (spResources->m_closed)
@@ -357,7 +359,11 @@ namespace Hermes
 
             boost::system::error_code ecDummy;
             m_spResources->m_acceptor.close(ecDummy);
-            m_spResources->m_timer.cancel(ecDummy);
+            try
+            {
+                m_spResources->m_timer.cancel();
+            }
+            catch (const boost::system::system_error&) {}
         }
 
         template<class... Ts>

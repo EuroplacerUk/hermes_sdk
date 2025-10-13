@@ -96,17 +96,17 @@ namespace Hermes
                 m_socket.m_configuration.m_hostName, " on port=", m_socket.m_configuration.m_port);
 
             asio::ip::tcp::resolver resolver(m_socket.m_asioService);
-            asio::ip::tcp::resolver::query query(asio::ip::tcp::v4(), m_socket.m_configuration.m_hostName, "");
 
             boost::system::error_code ec;
-            auto itEndpoint = resolver.resolve(query, ec);
+            auto resolveResults = resolver.resolve(asio::ip::tcp::v4(), m_socket.m_configuration.m_hostName, "", ec);
             if (ec)
             {
-                m_socket.Alarm(ec, "Unable to resolve ", query.host_name());
+                m_socket.Alarm(ec, "Unable to resolve ", m_socket.m_configuration.m_hostName);
                 RetryLater_();
                 return;
             }
                 
+            auto itEndpoint = resolveResults.cbegin();
             asio::ip::tcp::endpoint endpoint(*itEndpoint);
             endpoint.port(m_socket.m_configuration.m_port);
 
@@ -152,8 +152,7 @@ namespace Hermes
             if (m_socket.Closed())
                 return;
 
-            m_socket.m_timer.expires_from_now(
-                boost::posix_time::milliseconds(static_cast<int>(1000.0 * m_socket.m_configuration.m_retryDelayInSeconds)));
+            m_socket.m_timer.expires_after(Hermes::GetSeconds(m_socket.m_configuration.m_retryDelayInSeconds));
             m_socket.m_timer.async_wait([spThis = shared_from_this()](const boost::system::error_code& ec)
             {
                 if (spThis->m_socket.Closed())

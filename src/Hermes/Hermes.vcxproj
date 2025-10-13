@@ -117,7 +117,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;_DEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;BOOST_ASIO_NO_DEPRECATED;_DEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)\..\..\References; $(ProjectDir)\..\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <AdditionalOptions>/Zc:threadSafeInit-</AdditionalOptions>
@@ -137,7 +137,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;_DEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;BOOST_ASIO_NO_DEPRECATED;_DEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)\..\..\References; $(ProjectDir)\..\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <AdditionalOptions>/Zc:threadSafeInit-</AdditionalOptions>
@@ -156,7 +156,7 @@
       <WarningLevel>Level4</WarningLevel>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <Optimization>MaxSpeed</Optimization>
-      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;NDEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;BOOST_ASIO_NO_DEPRECATED;NDEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)\..\..\References; $(ProjectDir)\..\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <AdditionalOptions>/Zc:threadSafeInit-</AdditionalOptions>
@@ -179,7 +179,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;NDEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;BOOST_ASIO_NO_DEPRECATED;NDEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)\..\..\References; $(ProjectDir)\..\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <AdditionalOptions>/Zc:threadSafeInit-</AdditionalOptions>
@@ -217,6 +217,7 @@
     <ClInclude Include="DownstreamSession.h" />
     <ClInclude Include="DownstreamSerializer.h" />
     <ClInclude Include="DownstreamStateMachine.h" />
+    <ClInclude Include="HermesChrono.hpp" />
     <ClInclude Include="IService.h" />
     <ClInclude Include="MessageSerialization.h" />
     <ClInclude Include="Network.h" />
@@ -281,16 +282,16 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="..\packages\pugixml.1.15.0\build\native\pugixml.targets" Condition="Exists('..\packages\pugixml.1.15.0\build\native\pugixml.targets')" />
-    <Import Project="..\packages\boost.1.86.0\build\boost.targets" Condition="Exists('..\packages\boost.1.86.0\build\boost.targets')" />
     <Import Project="..\packages\Microsoft.Windows.CppWinRT.2.0.250303.1\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.250303.1\build\native\Microsoft.Windows.CppWinRT.targets')" />
+    <Import Project="..\packages\boost.1.87.0\build\boost.targets" Condition="Exists('..\packages\boost.1.87.0\build\boost.targets')" />
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
     <Error Condition="!Exists('..\packages\pugixml.1.15.0\build\native\pugixml.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\pugixml.1.15.0\build\native\pugixml.targets'))" />
-    <Error Condition="!Exists('..\packages\boost.1.86.0\build\boost.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\boost.1.86.0\build\boost.targets'))" />
     <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.250303.1\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.250303.1\build\native\Microsoft.Windows.CppWinRT.props'))" />
     <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.250303.1\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.250303.1\build\native\Microsoft.Windows.CppWinRT.targets'))" />
+    <Error Condition="!Exists('..\packages\boost.1.87.0\build\boost.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\boost.1.87.0\build\boost.targets'))" />
   </Target>
 </Project>
