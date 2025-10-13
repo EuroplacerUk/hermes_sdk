@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <Hermes.h>
 #ifdef _WINDOWS
+#define NOMINMAX
 #include <Windows.h>
 #else
  #include <pthread.h>

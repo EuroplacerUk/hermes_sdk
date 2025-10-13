@@ -234,5 +234,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <None Include="..\..\README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\..\COPYRIGHT.txt" />
   </ItemGroup>
 </Project>

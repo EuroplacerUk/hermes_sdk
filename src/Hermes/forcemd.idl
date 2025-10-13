@@ -1,0 +1,7 @@
+namespace Hermes
+{
+	struct HermesDummy
+	{
+		UInt32 reserved;
+	};
+}
