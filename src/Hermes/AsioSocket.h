@@ -30,6 +30,7 @@ limitations under the License.
 #include "boost_win32_patch.hpp"
 
 #include <memory>
+#include <span>
 
 namespace asio = boost::asio;
 
@@ -49,26 +50,116 @@ namespace Hermes
         service.Inform(sessionId, trace..., ": ", ec.message(), '(', ec.value(), ')');
     }
 
+    template<class DataT, size_t length>
+    class alignas(length) CircularBuffer
+    {
+    private:
+        std::array<DataT, length> pBuffer;
+        std::atomic<DataT*> pHead;
+        std::atomic<DataT*> pReadTail;
+        std::atomic<DataT*> pWriteTail;
+    public:
+        CircularBuffer()
+            :pBuffer{}, pHead{ BufBegin() }, pReadTail{ BufBegin() }, pWriteTail{ BufBegin() }
+        {
+
+        }
+
+        void Write(std::span<DataT> data)
+        {
+            size_t length = data.size();
+            if (length > pBuffer.size())
+                throw boost::system::system_error{ asio::error::message_size };
+
+            DataT* writeStart, * writeEnd;
+            do
+            {
+                writeStart = pWriteTail.load();
+                writeEnd = Advance(writeStart, length);
+            } while (!pWriteTail.compare_exchange_weak(writeStart, writeEnd));
+
+            DataT* testHead = pHead.load();
+            if ((writeStart < testHead || writeEnd < writeStart) && writeEnd > testHead)
+                throw boost::system::system_error{ asio::error::no_buffer_space };
+
+            DataT* beginBufferPtr = writeStart;
+            //We can write the buffer
+            if (writeEnd < writeStart)
+            {
+                //Goes round the end
+                std::span<DataT> firstSegment = data.subspan(0, BufEnd() - writeStart);
+                std::copy(firstSegment.begin(), firstSegment.end(), writeStart);
+                data = data.subspan(BufEnd() - writeStart);
+                beginBufferPtr = BufBegin();
+            }
+            std::copy(data.begin(), data.end(), beginBufferPtr);
+            //Write finished, now we can advance the read tail... but only if it's our turn
+            //If several writes are in flight, this waits for the first sequentially to complete, advancing its pointer, and so on
+            while (!pReadTail.compare_exchange_weak(writeStart, writeEnd));
+
+        }
+
+        std::span<DataT> Read()
+        {
+            DataT* head = pHead.load();
+            DataT* tail = pReadTail.load();
+            if (tail < head)
+                tail = BufEnd();
+            return std::span<DataT>{head, tail};
+        }
+
+        void Advance(std::span<DataT> consumed)
+        {
+            DataT* head = consumed.data();
+            assert(head == pHead.load());        //Only one reader supported at a time
+            DataT* advance = Advance(consumed.data(), consumed.size());
+            if (!pHead.compare_exchange_strong(head, advance))
+                throw boost::system::system_error{ asio::error::interrupted };
+        }
+
+    private:
+        constexpr DataT* BufBegin()
+        {
+            return pBuffer.data();
+        }
+        constexpr DataT* BufEnd()
+        {
+            return pBuffer.data() + pBuffer.size();
+        }
+
+        DataT* Advance(DataT* base, size_t length)
+        {
+            DataT* result = base + length;
+            if (result >= BufEnd())
+            {
+                result -= pBuffer.size();
+            }
+            return result;
+        }
+    };
+
     struct AsioSocket
     {
         unsigned m_sessionId;
         std::weak_ptr<void> m_wpOwner;
         IAsioService& m_service;
-        std::array<char, 1024> m_receivedData;
-        asio::io_context& m_asioService{m_service.GetUnderlyingService()};
-        asio::ip::tcp::socket m_socket{m_asioService};
-        asio::system_timer m_timer{m_asioService};
-        ISocketCallback* m_pCallback{nullptr};
+        asio::io_context& m_asioService{ m_service.GetUnderlyingService() };
+        asio::ip::tcp::socket m_socket{ m_asioService };
+        asio::system_timer m_timer{ m_asioService };
+        ISocketCallback* m_pCallback{ nullptr };
         NetworkConfiguration m_configuration;
         ConnectionInfo m_connectionInfo;
-        bool m_closed{false};
+        std::unique_ptr<CircularBuffer<char, 4096>> m_sendBuffer;
+        bool m_closed{ false };
 
         explicit AsioSocket(unsigned sessionId,
             const NetworkConfiguration& configuration, IAsioService& service) :
             m_sessionId(sessionId),
             m_service(service),
-            m_configuration(configuration)
-        {}
+            m_configuration(configuration),
+            m_sendBuffer(std::make_unique<CircularBuffer<char, 4096>>())
+        {
+        }
 
         AsioSocket(const AsioSocket&) = delete;
         AsioSocket& operator=(const AsioSocket&) = delete;
@@ -78,36 +169,34 @@ namespace Hermes
             Close_();
         }
 
-        std::shared_ptr<AsioSocket> shared_from_this() { return std::shared_ptr<AsioSocket>(m_wpOwner.lock(), this); }
-
         void StartReceiving()
         {
             assert(m_pCallback);
-            AsyncReceive_();
+            asio::co_spawn(m_asioService.get_executor(), ReceiveAsync(), asio::detached);
+            asio::co_spawn(m_asioService.get_executor(), CheckAliveAsync(), asio::detached);
+            //AsyncReceive_();
         }
 
-        void Send(StringView message)
+        void Send(std::string&& message)
         {
-            if (m_closed)
-                return m_service.Log(m_sessionId, "Already closed on Send: ", message);
-
-            boost::system::error_code ec;
-            asio::write(m_socket, asio::buffer(message.data(), message.size()), ec);
-            if (ec)
-                return DisconnectOnError_(ec, "Cannot write ", message);
-
-            m_service.Trace(ETraceType::eSENT, m_sessionId, message);
-            RestartCheckAliveTimer_();
+            m_sendBuffer->Write(message);
+            asio::co_spawn(m_asioService.get_executor(), DoSendAsync(), asio::detached);
         }
 
-        void Close() 
-        { 
-            Close_(); 
+        asio::awaitable<void> SendAsync(std::string&& message)
+        {
+            m_sendBuffer->Write(message);
+            return DoSendAsync();
         }
 
-        bool Closed() const 
-        { 
-            return m_closed; 
+        void Close()
+        {
+            Close_();
+        }
+
+        bool Closed() const
+        {
+            return m_closed;
         }
 
         template<class... Ts>
@@ -124,13 +213,60 @@ namespace Hermes
         }
 
     private:
+        std::atomic_bool m_send_running{ false };
+
+        asio::awaitable<void> DoSendAsync()
+        {
+            auto strong_ref{ m_wpOwner.lock() };
+            if (!strong_ref)
+                co_return;
+
+            bool notRunning = false;
+            std::span<char> buffer{};
+
+            if (!m_send_running.compare_exchange_strong(notRunning, true))
+                co_return;
+
+            do
+            {
+                if (!buffer.empty())
+                {
+                    co_await DoSendAsync(buffer);
+                    m_sendBuffer->Advance(buffer);
+                }
+
+                if (m_closed)
+                    break;
+
+                buffer = m_sendBuffer->Read();
+
+            } while (!buffer.empty());
+
+            m_send_running.store(false);
+        }
+
+        asio::awaitable<void> DoSendAsync(std::span<char> data)
+        {
+            StringView message{ data };
+
+            if (m_closed)
+                co_return m_service.Log(m_sessionId, "Already closed on Send: ", message);
+
+            boost::system::error_code ec;
+            co_await asio::async_write(m_socket, asio::buffer(message.data(), message.size()), asio::redirect_error(ec));
+            if (ec)
+                co_return DisconnectOnError_(ec, "Cannot write ", message);
+
+            m_service.Trace(ETraceType::eSENT, m_sessionId, message);
+            RestartCheckAliveTimer_();
+        }
 
         template<class... Ts>
         void DisconnectOnError_(const boost::system::error_code& ec, const Ts&... trace)
         {
             if (m_closed)
                 return;
-            
+
             // consider closed connections not to be an error:
             bool isError = (asio::error::eof != ec) && (asio::error::connection_reset != ec);
             auto error = isError ? Alarm(ec, trace...) : Info(ec, trace...);
@@ -165,73 +301,78 @@ namespace Hermes
         }
 
         //================ internally used methods, must all be called from the asio service thread =====================
-        void AsyncReceive_()
+        asio::awaitable<void> ReceiveAsync()
         {
-            if (m_closed)
-                return;
+            auto strong_ref{ m_wpOwner.lock() };
+            if (!strong_ref)
+                co_return;
 
-            m_service.Log(m_sessionId, "async_receive");
-            m_socket.async_receive(asio::buffer(m_receivedData), [spThis = shared_from_this()](const boost::system::error_code& ec, std::size_t size)
+            std::array<char, 1024> rxBuffer;
+
+            while (!m_closed)
             {
-                spThis->OnReceive_(ec, size);
-            });
+                try
+                {
+                    m_service.Log(m_sessionId, "ReceiveAsync");
+                    size_t size = co_await m_socket.async_receive(asio::buffer(rxBuffer));
+                    auto span = std::span{ rxBuffer }.subspan(0, size);
+                    StringSpan data{ span };
+                    if (!data.empty())
+                        m_service.Trace(ETraceType::eRECEIVED, m_sessionId, data);
+                    if (m_closed)
+                    {
+                        m_service.Log(m_sessionId, "Received data, but already closed");
+                        co_return;
+                    }
+
+                    assert(m_pCallback);
+                    if (!m_pCallback)
+                    {
+                        m_service.Alarm(m_sessionId, Hermes::EErrorCode::eIMPLEMENTATION_ERROR, "Received data, but no callback");
+                        co_return;
+                    }
+
+                    m_pCallback->OnReceived(data);
+                }
+                catch (const boost::system::system_error& err)
+                {
+                    co_return DisconnectOnError_(err.code(), "ReceiveAsync");
+                }
+            }
+
         }
 
-        void OnReceive_(const boost::system::error_code& ec, std::size_t size)
+        asio::awaitable<void> CheckAliveAsync()
         {
-            StringSpan data(&m_receivedData.front(), size);
+            auto strong_ref{ m_wpOwner.lock() };
+            if (!strong_ref)
+                co_return;
 
-            if (size)
+            while (!m_closed)
             {
-                m_service.Trace(ETraceType::eRECEIVED, m_sessionId, data);
+                if (!m_configuration.m_checkAlivePeriodInSeconds)
+                    co_return;
+
+                try
+                {
+                    m_timer.expires_after(Hermes::GetSeconds(m_configuration.m_checkAlivePeriodInSeconds));
+                    co_await m_timer.async_wait();
+                    co_await SendAsync(Serialize(CheckAliveData()));
+                }
+                catch (const boost::system::error_code&)
+                {
+                    continue;
+                }
             }
 
-            if (m_closed)
-            {
-                m_service.Log(m_sessionId, "Received data, but already closed");
-                return;
-            }
-
-            if (ec)
-                return DisconnectOnError_(ec, "OnReceive");
-
-            assert(m_pCallback);
-            if (!m_pCallback)
-            {
-                m_service.Alarm(m_sessionId, Hermes::EErrorCode::eIMPLEMENTATION_ERROR, "Received data, but no callback");
-                return;
-            }
-
-            m_pCallback->OnReceived(data);
-            AsyncReceive_();
+            if (!m_configuration.m_checkAlivePeriodInSeconds)
+                co_return;
         }
 
         void RestartCheckAliveTimer_()
         {
-            if (m_closed)
-                return;
-
-            if (!m_configuration.m_checkAlivePeriodInSeconds)
-                return;
-
-            m_timer.expires_after(Hermes::GetSeconds(m_configuration.m_checkAlivePeriodInSeconds));
-            m_timer.async_wait([spThis = shared_from_this()](const boost::system::error_code& ec)
-            {
-                spThis->OnCheckAliveTrigger_(ec);
-            });
+            m_timer.cancel();
         }
-
-        void OnCheckAliveTrigger_(const boost::system::error_code& ec)
-        {
-            if (m_closed)
-                return;
-
-            if (ec) // cancelled or whatever
-                return;
-
-            Send(Serialize(CheckAliveData()));
-        }
-
 
     };
 

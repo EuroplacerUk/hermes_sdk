@@ -45,13 +45,13 @@ namespace Hermes
             const ConnectionInfo& PeerConnectionInfo() const;
 
             void Connect(ISessionCallback&);
-            void Signal(const SupervisoryServiceDescriptionData&, StringView rawXml);
-            void Signal(const SendWorkOrderInfoData&, StringView rawXml);
-            void Signal(const GetConfigurationData&, StringView rawXml);
-            void Signal(const SetConfigurationData&, StringView rawXml);
-            void Signal(const NotificationData&, StringView rawXml);
-            void Signal(const CheckAliveData&, StringView rawXml);
-            void Signal(const QueryHermesCapabilitiesData&, StringView rawXml);
+            void Signal(const SupervisoryServiceDescriptionData&, std::string&& rawXml);
+            void Signal(const SendWorkOrderInfoData&, std::string&& rawXml);
+            void Signal(const GetConfigurationData&, std::string&& rawXml);
+            void Signal(const SetConfigurationData&, std::string&& rawXml);
+            void Signal(const NotificationData&, std::string&& rawXml);
+            void Signal(const CheckAliveData&, std::string&& rawXml);
+            void Signal(const QueryHermesCapabilitiesData&, std::string&& rawXml);
             void Disconnect();
 
         private:

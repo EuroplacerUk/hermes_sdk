@@ -104,7 +104,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
     }
 
     template<class DataT>
-    void Signal(unsigned sessionId, const DataT& data, StringView rawXml)
+    void Signal(unsigned sessionId, const DataT& data, std::string&& rawXml)
     {
         m_service.Log(sessionId, "Signal(", data, ',', rawXml, ')');
 
@@ -112,7 +112,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         if (!pSession)
             return m_service.Log(sessionId, "No matching session");
 
-        pSession->Signal(data, rawXml);
+        pSession->Signal(data, std::move(rawXml));
     }
 
     void Disable(const NotificationData& notificationData)
@@ -153,8 +153,8 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
 
             NotificationData notification(ENotificationCode::eCONNECTION_REFUSED_BECAUSE_OF_ESTABLISHED_CONNECTION, ESeverity::eERROR
                 , oss.str());
-            const auto& xmlString = Serialize(notification);
-            upSocket->Send(xmlString);
+            auto xmlString = Serialize(notification);
+            upSocket->Send(std::move(xmlString));
 
             // send a check alive to the current connection to reduce time for timeout detection:
             CheckAliveData checkAliveData{};
@@ -478,20 +478,20 @@ void SignalHermesDownstreamRawXml(HermesDownstream* pDownstream, uint32_t sessio
         auto parseData = xmlData;
 
         bool wasDispatched = false;
-        dispatcher.Add<ServiceDescriptionData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<BoardAvailableData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<RevokeBoardAvailableData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<TransportFinishedData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<BoardForecastData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<SendBoardInfoData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<NotificationData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<CheckAliveData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
+        dispatcher.Add<ServiceDescriptionData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<BoardAvailableData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<RevokeBoardAvailableData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<TransportFinishedData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<BoardForecastData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<SendBoardInfoData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<NotificationData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<CheckAliveData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, std::move(xmlData)); });
         
         dispatcher.Dispatch(parseData);
         if (wasDispatched)
             return;
 
-        pDownstream->Signal(sessionId, NotificationData{}, xmlData);
+        pDownstream->Signal(sessionId, NotificationData{}, std::move(xmlData));
     });
 }
 
@@ -502,7 +502,7 @@ void ResetHermesDownstreamRawXml(HermesDownstream* pDownstream, HermesStringView
     {
         if (!data.empty() && pDownstream->m_upSession)
         {
-            pDownstream->m_upSession->Signal(NotificationData(), data);
+            pDownstream->m_upSession->Signal(NotificationData(), std::move(data));
         }
         pDownstream->Reset();
     });

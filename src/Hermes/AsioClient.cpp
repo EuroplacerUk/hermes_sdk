@@ -65,12 +65,17 @@ namespace Hermes
             assert(!m_socket.m_pCallback);
             m_socket.m_wpOwner = wpOwner;
             m_socket.m_pCallback = &callback;
-            AsyncConnect_();
+            asio::co_spawn(m_socket.m_asioService.get_executor(), ConnectAsync(), asio::detached);
         }
 
-        void Send(StringView message) override 
+        void Send(std::string&& message) override 
         { 
-            m_socket.Send(message); 
+            m_socket.Send(std::move(message)); 
+        }
+
+        asio::awaitable<void> SendAsync(std::string&& message) override
+        {
+            return m_socket.SendAsync(std::move(message));
         }
 
         void Close() override 
@@ -86,28 +91,57 @@ namespace Hermes
             return std::shared_ptr<ClientSocket>(m_socket.m_wpOwner.lock(), this);
         }
 
-        void AsyncConnect_()
+        asio::awaitable<void> ConnectAsync()
+        {
+            auto strong_ref{ m_socket.m_wpOwner.lock() };
+            if (!strong_ref) co_return;
+
+            auto& configuration = m_socket.m_configuration;
+
+            try
+            {
+                while (!co_await TryConnectAsync(configuration))
+                {
+                    //Retry later
+                    m_socket.m_timer.expires_after(Hermes::GetSeconds(m_socket.m_configuration.m_retryDelayInSeconds));
+                    co_await m_socket.m_timer.async_wait();
+                }
+            }
+            catch (const boost::system::system_error&)
+            {
+                if(m_socket.Closed())
+                    m_socket.m_service.Log(m_socket.m_sessionId, "ConnectAsync, but already closed");
+            }
+        }
+
+        asio::awaitable<bool> TryConnectAsync(const Hermes::NetworkConfiguration& configuration)
         {
             if (m_socket.Closed())
             {
-                m_socket.m_service.Log(m_socket.m_sessionId, "AsyncConnect_, but already closed");
-                return;
+                auto err = asio::error::make_error_code(asio::error::connection_aborted);
+                throw boost::system::system_error{ err };
             }
 
-            m_socket.m_service.Log(m_socket.m_sessionId, "AsyncConnect_ to host=", 
-                m_socket.m_configuration.m_hostName, " on port=", m_socket.m_configuration.m_port);
+            auto callback = m_socket.m_pCallback;
+            assert(callback);
+            if (!callback)
+            {
+                m_socket.m_service.Alarm(m_socket.m_sessionId, Hermes::EErrorCode::eIMPLEMENTATION_ERROR,
+                    "Connected, but no callback");
+                co_return true;     //No handling of this condition, so don't retry
+            }
 
+            m_socket.m_service.Log(m_socket.m_sessionId, "ConnectAsync to host=", configuration.m_hostName, " on port=", configuration.m_port);
             asio::ip::tcp::resolver resolver(m_socket.m_asioService);
 
             boost::system::error_code ec;
-            auto resolveResults = resolver.resolve(asio::ip::tcp::v4(), m_socket.m_configuration.m_hostName, "", ec);
+            auto resolveResults = co_await resolver.async_resolve(asio::ip::tcp::v4(), configuration.m_hostName, "", asio::redirect_error(ec));
             if (ec)
             {
                 m_socket.Alarm(ec, "Unable to resolve ", m_socket.m_configuration.m_hostName);
-                RetryLater_();
-                return;
+                co_return false;
             }
-                
+
             auto itEndpoint = resolveResults.cbegin();
             asio::ip::tcp::endpoint endpoint(*itEndpoint);
             endpoint.port(m_socket.m_configuration.m_port);
@@ -117,54 +151,20 @@ namespace Hermes
             m_socket.m_connectionInfo.m_hostName = itEndpoint->host_name();
 
             m_socket.m_service.Log(m_socket.m_sessionId, "Connecting to ", m_socket.m_connectionInfo, " ...");
-            m_socket.m_socket.async_connect(endpoint, 
-                [spThis = shared_from_this()](const boost::system::error_code& ec)
-            {
-                if (spThis->m_socket.Closed())
-                    return;
 
-                spThis->OnConnected_(ec);
-            });
-        }
-
-        void OnConnected_(const boost::system::error_code& ec)
-        {
+            co_await m_socket.m_socket.async_connect(endpoint, asio::redirect_error(ec));
             if (ec)
             {
                 m_socket.Alarm(ec, "Unable to connect to ", m_socket.m_connectionInfo);
-                RetryLater_();
-                return;
+                co_return false;
             }
 
-            assert(m_socket.m_pCallback);
-            if (!m_socket.m_pCallback)
-            {
-                m_socket.m_service.Alarm(m_socket.m_sessionId, Hermes::EErrorCode::eIMPLEMENTATION_ERROR, 
-                    "Connected, but no callback");
-                return;
-            }
 
             m_socket.m_service.Inform(m_socket.m_sessionId, "OnConnected ", m_socket.m_connectionInfo);
-            m_socket.m_pCallback->OnConnected(m_socket.m_connectionInfo);
+            callback->OnConnected(m_socket.m_connectionInfo);
             m_socket.StartReceiving();
-        }
 
-        void RetryLater_()
-        {
-            if (m_socket.Closed())
-                return;
-
-            m_socket.m_timer.expires_after(Hermes::GetSeconds(m_socket.m_configuration.m_retryDelayInSeconds));
-            m_socket.m_timer.async_wait([spThis = shared_from_this()](const boost::system::error_code& ec)
-            {
-                if (spThis->m_socket.Closed())
-                    return;
-
-                if (ec) // we were canccelled
-                    return;
-
-                spThis->AsyncConnect_();
-            });
+            co_return true;
         }
     };
 }

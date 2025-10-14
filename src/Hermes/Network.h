@@ -23,6 +23,7 @@ limitations under the License.
 #include <memory>
 #include <string>
 
+#include <boost/asio.hpp>
 #include <boost/system/error_code.hpp>
 
 
@@ -42,7 +43,8 @@ namespace Hermes
         virtual const NetworkConfiguration& GetConfiguration() const = 0;
 
         virtual void Connect(std::weak_ptr<void> wpOwner, ISocketCallback&) = 0;
-        virtual void Send(StringView message) = 0;
+        virtual void Send(std::string&& message) = 0;
+        virtual boost::asio::awaitable<void> SendAsync(std::string&& message) = 0;
         virtual void Close() = 0;
 
         virtual ~ISocket() {}

@@ -31,15 +31,15 @@ namespace Hermes
         struct IStateMachine
         {
             virtual void Connect(std::weak_ptr<void> wpOwner, IStateMachineCallback&) = 0;
-            virtual void Signal(const ServiceDescriptionData&, StringView rawXml) = 0;
-            virtual void Signal(const MachineReadyData&, StringView rawXml) = 0;
-            virtual void Signal(const RevokeMachineReadyData&, StringView rawXml) = 0;
-            virtual void Signal(const StartTransportData&, StringView rawXml) = 0;
-            virtual void Signal(const StopTransportData&, StringView rawXml) = 0;
-            virtual void Signal(const QueryBoardInfoData&, StringView rawXml) = 0;
-            virtual void Signal(const NotificationData&, StringView rawXml) = 0;
-            virtual void Signal(const CommandData&, StringView rawXml) = 0;
-            virtual void Signal(const CheckAliveData&, StringView rawXml) = 0;
+            virtual void Signal(const ServiceDescriptionData&, std::string&& rawXml) = 0;
+            virtual void Signal(const MachineReadyData&, std::string&& rawXml) = 0;
+            virtual void Signal(const RevokeMachineReadyData&, std::string&& rawXml) = 0;
+            virtual void Signal(const StartTransportData&, std::string&& rawXml) = 0;
+            virtual void Signal(const StopTransportData&, std::string&& rawXml) = 0;
+            virtual void Signal(const QueryBoardInfoData&, std::string&& rawXml) = 0;
+            virtual void Signal(const NotificationData&, std::string&& rawXml) = 0;
+            virtual void Signal(const CommandData&, std::string&& rawXml) = 0;
+            virtual void Signal(const CheckAliveData&, std::string&& rawXml) = 0;
             virtual void Disconnect() = 0;
 
             virtual ~IStateMachine() = default;

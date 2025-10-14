@@ -72,9 +72,9 @@ namespace Hermes
                 m_pCallback->OnSocketConnected(m_id, state, connectionInfo);
             }
 
-            template<class DataT> void Signal_(const DataT& data, StringView rawXml)
+            template<class DataT> void Signal_(const DataT& data, std::string&& rawXml)
             {
-                m_upStateMachine->Signal(data, rawXml);
+                m_upStateMachine->Signal(data, std::move(rawXml));
             }
 
             template<class DataT> void On_(EState state, const DataT& data)
@@ -150,15 +150,15 @@ namespace Hermes
             m_spImpl->m_upStateMachine->Connect(m_spImpl, *m_spImpl);
         }
 
-        void Session::Signal(const ServiceDescriptionData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const BoardAvailableData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const RevokeBoardAvailableData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const TransportFinishedData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const BoardForecastData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const SendBoardInfoData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const NotificationData&  data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const CommandData&  data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const CheckAliveData&  data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
+        void Session::Signal(const ServiceDescriptionData& data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const BoardAvailableData& data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const RevokeBoardAvailableData& data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const TransportFinishedData& data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const BoardForecastData& data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const SendBoardInfoData& data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const NotificationData&  data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const CommandData&  data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const CheckAliveData&  data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
 
         void Session::Disconnect()
         {

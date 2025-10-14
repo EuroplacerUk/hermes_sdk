@@ -33,7 +33,7 @@ namespace Hermes
         struct ISerializer
         {
             virtual void Connect(std::weak_ptr<void> wpOwner, ISerializerCallback&) = 0;
-            virtual void Signal(StringView rawXml) = 0;
+            virtual void Signal(std::string&& rawXml) = 0;
             virtual void Disconnect() = 0;
 
             virtual ~ISerializer() = default;

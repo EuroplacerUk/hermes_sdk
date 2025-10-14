@@ -107,7 +107,7 @@ struct HermesUpstream : ISessionCallback
     }
 
     template<class DataT>
-    void Signal(unsigned sessionId, const DataT& data, StringView rawXml)
+    void Signal(unsigned sessionId, const DataT& data, std::string&& rawXml)
     {
         m_service.Log(sessionId, "Signal(", data, ',', rawXml, ')');
 
@@ -115,7 +115,7 @@ struct HermesUpstream : ISessionCallback
         if (!pSession)
             return;
 
-        pSession->Signal(data, rawXml);
+        pSession->Signal(data, std::move(rawXml));
     }
 
     void Stop()
@@ -339,14 +339,23 @@ struct HermesUpstream : ISessionCallback
     void DelayCreateNewSession_(double delay)
     {
         m_service.Log(0U, "DelayCreateNewSession_");
+        asio::co_spawn(m_service.GetUnderlyingService().get_executor(), DelayCreateNewSessionAsync(delay), asio::detached);
+    }
+
+    asio::awaitable<void> DelayCreateNewSessionAsync(double delay)
+    {
 
         m_timer.expires_after(Hermes::GetSeconds(delay));
-        m_timer.async_wait([this](const boost::system::error_code& ec)
+        try
         {
-            if (ec) // timer cancelled or whatever
-                return;
-            CreateNewSession_();
-        });
+            co_await m_timer.async_wait();
+        }
+        catch (const boost::system::system_error&)
+        {
+            // timer cancelled or whatever
+            co_return;
+        }
+        CreateNewSession_();
     }
 };
 
@@ -495,31 +504,31 @@ void SignalHermesUpstreamRawXml(HermesUpstream* pUpstream, uint32_t sessionId, H
         auto parseData = xmlData;
 
         bool wasDispatched = false;
-        dispatcher.Add<ServiceDescriptionData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<MachineReadyData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<RevokeMachineReadyData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<StartTransportData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<StopTransportData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<QueryBoardInfoData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<NotificationData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<CheckAliveData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, xmlData); });
+        dispatcher.Add<ServiceDescriptionData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<MachineReadyData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<RevokeMachineReadyData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<StartTransportData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<StopTransportData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<QueryBoardInfoData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<NotificationData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, std::move(xmlData)); });
+        dispatcher.Add<CheckAliveData>([&](const auto& data) { wasDispatched = true; pUpstream->Signal(sessionId, data, std::move(xmlData)); });
 
         dispatcher.Dispatch(parseData);
         if (wasDispatched)
             return;
 
-        pUpstream->Signal(sessionId, NotificationData{}, xmlData);
+        pUpstream->Signal(sessionId, NotificationData{}, std::move(xmlData));
     });
 }
 
 void ResetHermesUpstreamRawXml(HermesUpstream* pUpstream, HermesStringView rawXml)
 {
     pUpstream->m_service.Log(0U, "ResetHermesUpstreamRawXml");
-    pUpstream->m_service.Post([pUpstream, data = std::string(rawXml.m_pData, rawXml.m_size)]()
+    pUpstream->m_service.Post([pUpstream, data = std::string(rawXml.m_pData, rawXml.m_size)]() mutable
     {
         if (!data.empty() && pUpstream->m_upSession)
         {
-            pUpstream->m_upSession->Signal(NotificationData(), data);
+            pUpstream->m_upSession->Signal(NotificationData(), std::move(data));
         }
         pUpstream->Reset();
     });

@@ -151,7 +151,7 @@ namespace Hermes
             void On(const CheckAliveData& data) override { On_(data, "CheckAlive"); }
             void On(const QueryHermesCapabilitiesData& data) override { On_(data, "QueryHermesCapabilities"); }
 
-            void Signal_(StringView rawXml)
+            void Signal_(std::string&& rawXml)
             {
                 switch (m_state)
                 {
@@ -160,7 +160,7 @@ namespace Hermes
                     return;
 
                 default:
-                    m_upSerializer->Signal(rawXml);
+                    m_upSerializer->Signal(std::move(rawXml));
                     return;
                 }
             }

@@ -219,28 +219,28 @@ namespace Hermes
             m_spImpl->m_upSerializer->Connect(m_spImpl, *m_spImpl);
         }
 
-        void Session::Signal(const SupervisoryServiceDescriptionData&, StringView rawXml)
+        void Session::Signal(const SupervisoryServiceDescriptionData&, std::string&& rawXml)
         {
             switch (m_spImpl->m_state)
             {
             case EVerticalState::eSOCKET_CONNECTED:
                 m_spImpl->m_state = EVerticalState::eSUPERVISORY_SERVICE_DESCRIPTION;
-                m_spImpl->m_upSerializer->Signal(rawXml);
+                m_spImpl->m_upSerializer->Signal(std::move(rawXml));
                 return;
 
             default:
                 if (m_spImpl->DisconnectedDueToIllegalClientEvent_("ServiceDescription"))
                     return;
-                m_spImpl->m_upSerializer->Signal(rawXml);
+                m_spImpl->m_upSerializer->Signal(std::move(rawXml));
             }
         }
 
-        void Session::Signal(const SendWorkOrderInfoData&, StringView rawXml) { m_spImpl->Signal_(rawXml); }
-        void Session::Signal(const SetConfigurationData&, StringView rawXml) { m_spImpl->Signal_(rawXml); }
-        void Session::Signal(const GetConfigurationData&, StringView rawXml) { m_spImpl->Signal_(rawXml); }
-        void Session::Signal(const NotificationData&, StringView rawXml) { m_spImpl->Signal_(rawXml); }
-        void Session::Signal(const CheckAliveData&, StringView rawXml) { m_spImpl->Signal_(rawXml); }
-        void Session::Signal(const QueryHermesCapabilitiesData&, StringView rawXml) { m_spImpl->Signal_(rawXml); }
+        void Session::Signal(const SendWorkOrderInfoData&, std::string&& rawXml) { m_spImpl->Signal_(std::move(rawXml)); }
+        void Session::Signal(const SetConfigurationData&, std::string&& rawXml) { m_spImpl->Signal_(std::move(rawXml)); }
+        void Session::Signal(const GetConfigurationData&, std::string&& rawXml) { m_spImpl->Signal_(std::move(rawXml)); }
+        void Session::Signal(const NotificationData&, std::string&& rawXml) { m_spImpl->Signal_(std::move(rawXml)); }
+        void Session::Signal(const CheckAliveData&, std::string&& rawXml) { m_spImpl->Signal_(std::move(rawXml)); }
+        void Session::Signal(const QueryHermesCapabilitiesData&, std::string&& rawXml) { m_spImpl->Signal_(std::move(rawXml)); }
 
         void Session::Disconnect()
         {

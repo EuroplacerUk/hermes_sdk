@@ -79,8 +79,8 @@ namespace Hermes
                 if (!m_connected)
                     return;
 
-                const auto& xmlString = Serialize(data);
-                m_socket.Send(xmlString);
+                auto xmlString = Serialize(data);
+                m_socket.Send(std::move(xmlString));
             }
 
             void Signal(const NotificationData& data) override
@@ -88,8 +88,8 @@ namespace Hermes
                 if (!m_connected)
                     return;
 
-                const auto& xmlString = Serialize(data);
-                m_socket.Send(xmlString);
+                auto xmlString = Serialize(data);
+                m_socket.Send(std::move(xmlString));
             }
 
             void Disconnect(const NotificationData& data) override

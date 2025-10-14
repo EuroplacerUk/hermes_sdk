@@ -25,6 +25,7 @@ limitations under the License.
 #include "HermesChrono.hpp"
 
 #include <boost/asio.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
 
 #include <atomic>
 
@@ -33,6 +34,7 @@ namespace asio = boost::asio;
 std::atomic<uint32_t> m_configurationTraceId{0};
 
 using namespace Hermes;
+using namespace boost::asio::experimental::awaitable_operators;
 
 namespace
 {
@@ -56,11 +58,9 @@ namespace
         CurrentConfigurationCallback m_configurationCallback;
         NotificationCallback m_notificationCallback;
         ErrorCallback m_errorCallback;
+        bool m_moreData;
 
         static const std::size_t cCHUNK_SIZE = 4096;
-        std::array<char, cCHUNK_SIZE> m_receivedData;
-
-        bool m_receiving = false;
 
         ConfigurationHelper(StringView traceName, StringView  hostName,
             unsigned timeoutInSeconds,
@@ -78,9 +78,9 @@ namespace
         {
             m_dispatcher.Add<CurrentConfigurationData>([this](const auto& data) -> Error
             {
-                m_receiving = false;
                 const Converter2C<CurrentConfigurationData> converter (data);
                 m_configurationCallback(0U, converter.CPointer());
+                m_moreData = false;
                 return{};
 
             });
@@ -88,8 +88,68 @@ namespace
             {
                 const Converter2C<NotificationData> converter(data);
                 m_notificationCallback(0U, converter.CPointer());
+                m_moreData = true;
                 return{};
             });
+        }
+
+        static void GetHermesConfiguration(StringView hostName, unsigned timeoutInSeconds, const HermesGetConfigurationCallbacks* pCallbacks)
+        {
+            
+            ConfigurationHelper helper("GetHermesConfiguration", hostName, timeoutInSeconds,
+                pCallbacks->m_currentConfigurationCallback, NotificationCallback{},
+                pCallbacks->m_errorCallback, pCallbacks->m_traceCallback);
+
+            helper.RunOne(helper.GetHermesConfigurationAsync());
+        }
+
+        static void SetHermesConfiguration(StringView hostName, const Hermes::SetConfigurationData& data, unsigned timeoutInSeconds, const HermesSetConfigurationCallbacks* pCallbacks)
+        {
+            ConfigurationHelper helper("SetHermesConfiguration", hostName, timeoutInSeconds,
+                pCallbacks->m_currentConfigurationCallback, pCallbacks->m_notificationCallback,
+                pCallbacks->m_errorCallback, pCallbacks->m_traceCallback);
+
+            helper.RunOne(helper.SetHermesConfigurationAsync(data));
+        }
+
+    private:
+        asio::awaitable<void> GetHermesConfigurationAsync()
+        {
+            if (!co_await ConnectAsync())
+                co_return;
+
+            co_await GetConfigurationAsync();
+        }
+
+        asio::awaitable<void> SetHermesConfigurationAsync(const Hermes::SetConfigurationData& data)
+        {
+            if (!co_await ConnectAsync())
+                co_return;
+
+            // send the set message:
+
+            const std::string xmlString = Serialize(data);
+            boost::system::error_code ec;
+            co_await asio::async_write(m_socket, asio::buffer(xmlString.data(), xmlString.size()), asio::redirect_error(ec));
+            if (ec)
+                co_return GenerateError(EErrorCode::eNETWORK_ERROR, "asio::async_write", ec.message());
+            m_service.Trace(ETraceType::eSENT, 0U, xmlString);
+
+            co_await GetConfigurationAsync();
+        }
+
+        void RunOne(asio::awaitable<void>&& task)
+        {
+            m_asioService.restart();
+            asio::co_spawn(m_asioService.get_executor(), std::move(task), asio::detached);
+            try
+            {
+                m_asioService.poll();
+            }
+            catch (const boost::system::system_error& err)
+            {
+                return GenerateError(EErrorCode::eNETWORK_ERROR, "asio::run_one", err.what());
+            }
         }
 
         template<class... Ts>
@@ -100,114 +160,90 @@ namespace
             m_errorCallback(converter.CPointer());
         }
 
-        bool Connect()
+        asio::awaitable<bool> ConnectAsync()
         {
             asio::ip::tcp::resolver resolver(m_asioService);
 
             boost::system::error_code ec;
-            auto epResults = resolver.resolve(asio::ip::tcp::v4(), m_hostName, "", ec);
+            auto epResults = co_await resolver.async_resolve(asio::ip::tcp::v4(), m_hostName, "", asio::redirect_error(ec));
             if (ec)
             {
                 GenerateError(EErrorCode::eNETWORK_ERROR, "asio::resolve: ", ec.message());
-                return false;
+                co_return false;
             }
 
             auto itEndpoint = epResults.cbegin();
             asio::ip::tcp::endpoint endpoint(*itEndpoint);
             endpoint.port(cCONFIG_PORT);
-            boost::system::error_code ecConnect = asio::error::would_block; // can never be returned from an async function
-            asio::system_timer receiveTimer{m_asioService};
+
+            asio::system_timer receiveTimer{ m_asioService };
             receiveTimer.expires_after(Hermes::GetSeconds(m_timeoutInSeconds));
-            receiveTimer.async_wait([](const boost::system::error_code&) {}); // leaves ecAccept as is
-            m_socket.async_connect(endpoint, [&](boost::system::error_code in_ec) 
-            { 
-                ecConnect = in_ec; 
-            });
+
             try
             {
-                m_asioService.run_one();
+
+                auto result = co_await(m_socket.async_connect(endpoint, asio::use_awaitable) || receiveTimer.async_wait(asio::use_awaitable));
+
+                if (result.index() != 0)
+                    throw boost::system::system_error(asio::error::timed_out);
             }
-            catch(const boost::system::system_error& err)
+            catch (const boost::system::system_error& err)
             {
-                GenerateError(EErrorCode::eIMPLEMENTATION_ERROR, "asio::run_one: ", err.what());
-                return false;
+                EErrorCode code = (err.code() == asio::error::timed_out) ? EErrorCode::eTIMEOUT : EErrorCode::eNETWORK_ERROR;
+                GenerateError(code, "asio::async_connect: ", err.what());
+                co_return false;
             }
 
-            if (ecConnect == asio::error::would_block)
-            {
-                GenerateError(EErrorCode::eTIMEOUT, "asio::accept: timeout");
-                return false;
-            }
-
-            if (ecConnect)
-            {
-                GenerateError(EErrorCode::eNETWORK_ERROR, "asio::async_connect: ", ec.message());
-                return false;
-            }
-
-            return true;
+            co_return true;
         }
 
-        void GetConfiguration()
+        asio::awaitable<void> GetConfigurationAsync()
         {
             // write the get-message
             GetConfigurationData data;
-            const auto& msgString = Serialize(data);
+            const std::string msgString = Serialize(data);
             boost::system::error_code ec;
-            asio::write(m_socket, asio::buffer(msgString.data(), msgString.size()), ec);
+            asio::async_write(m_socket, asio::buffer(msgString.data(), msgString.size()), asio::redirect_error(ec));
             if (ec)
             {
-                GenerateError(EErrorCode::eNETWORK_ERROR, "asio::write: ", ec.message());
-                return;
+                GenerateError(EErrorCode::eNETWORK_ERROR, "asio::async_write: ", ec.message());
+                co_return;
             }
             m_service.Trace(ETraceType::eSENT, 0U, msgString);
-
-            m_receiving = true;
 
             // parallel to receiving, run the timer:
             asio::system_timer receiveTimer{m_asioService};
             receiveTimer.expires_after(Hermes::GetSeconds(m_timeoutInSeconds));
-            receiveTimer.async_wait([&](const boost::system::error_code&)
-            {
-                if (!m_receiving)
-                    return;
 
-                m_receiving = false;
-                GenerateError(EErrorCode::eTIMEOUT, "asio::receive: ", ec.message());
-            });
+            std::array<char, cCHUNK_SIZE> receivedData;
 
-            while (m_receiving)
+            try
             {
-                m_socket.async_receive(asio::buffer(m_receivedData), [this](const boost::system::error_code ecReceive, std::size_t size)
+                m_moreData = true;
+
+                while (m_moreData)
                 {
-                    OnAsyncReceive_(ecReceive, size);
-                });
-                m_asioService.restart();
-                try
-                {
-                    m_asioService.run_one();
-                }
-                catch (const boost::system::system_error& err)
-                {
-                    return GenerateError(EErrorCode::eNETWORK_ERROR, "asio::run_one", err.what());
+                    std::variant<size_t, std::monostate> result = co_await(m_socket.async_receive(asio::buffer(receivedData), asio::use_awaitable) || receiveTimer.async_wait(asio::use_awaitable));
+                    if (result.index() != 0)
+                        throw boost::system::system_error(asio::error::timed_out);
+                    size_t length = std::get<size_t>(result);
+
+                    std::span<char> span = std::span{ receivedData }.subspan(0, length);
+                    auto svResult = StringSpan{ span };
+
+                    m_service.Trace(ETraceType::eRECEIVED, 0U, StringView{ svResult });
+
+                    if (auto error = m_dispatcher.Dispatch(svResult))
+                    {
+                        m_service.Alarm(0U, EErrorCode::ePEER_ERROR, error.m_text);
+                    }
                 }
             }
-        }
-
-        void OnAsyncReceive_(const boost::system::error_code& ecReceive, std::size_t size)
-        {
-            if (ecReceive)
+            catch (const boost::system::system_error& err)
             {
-                m_receiving = false;
-                return GenerateError(EErrorCode::eNETWORK_ERROR, "asio::async_receive: ", ecReceive.message());
-            }
-
-            m_service.Trace(ETraceType::eRECEIVED, 0U, StringView{&m_receivedData[0], size});
-
-            if (auto error = m_dispatcher.Dispatch(StringSpan{&m_receivedData[0], size}))
-            {
-                m_receiving = false;
-                m_service.Alarm(0U, EErrorCode::ePEER_ERROR, error.m_text);
+                EErrorCode code = (err.code() == asio::error::timed_out) ? EErrorCode::eTIMEOUT : EErrorCode::eNETWORK_ERROR;
+                GenerateError(code, "asio::async_receive: ", err.what());
+                co_return;
             }
         }
     };
@@ -216,34 +252,14 @@ namespace
 void SetHermesConfiguration(HermesStringView hostName, const HermesSetConfigurationData* pConfiguration,
     unsigned timeoutInSeconds, const HermesSetConfigurationCallbacks* pCallbacks)
 {
-    ConfigurationHelper helper("SetHermesConfiguration", ToCpp(hostName), timeoutInSeconds,
-        pCallbacks->m_currentConfigurationCallback, pCallbacks->m_notificationCallback,
-        pCallbacks->m_errorCallback, pCallbacks->m_traceCallback);
-
-    if (!helper.Connect())
-        return;
-
-    // send the set message:
     SetConfigurationData data(ToCpp(*pConfiguration));
-    const auto& xmlString = Serialize(data);
-    boost::system::error_code ec;
-    asio::write(helper.m_socket, asio::buffer(xmlString.data(), xmlString.size()), ec);
-    if (ec)
-        return helper.GenerateError(EErrorCode::eNETWORK_ERROR, "asio::write", ec.message());
-    helper.m_service.Trace(ETraceType::eSENT, 0U, xmlString);
-    helper.GetConfiguration();
+    ConfigurationHelper::SetHermesConfiguration(ToCpp(hostName), data, timeoutInSeconds, pCallbacks);
+
 }
 
 void GetHermesConfiguration(HermesStringView  hostName,
     unsigned timeoutInSeconds, const HermesGetConfigurationCallbacks* pCallbacks)
 {
-    ConfigurationHelper helper("GetHermesConfiguration", ToCpp(hostName), timeoutInSeconds,
-        pCallbacks->m_currentConfigurationCallback, NotificationCallback(),
-        pCallbacks->m_errorCallback, pCallbacks->m_traceCallback);
-
-    if (!helper.Connect())
-        return;
-
-    helper.GetConfiguration();
+    ConfigurationHelper::GetHermesConfiguration(ToCpp(hostName), timeoutInSeconds, pCallbacks);
 }
 

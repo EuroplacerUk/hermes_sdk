@@ -11,6 +11,7 @@ namespace Hermes
     public:
         constexpr StringSpan() = default;
         constexpr StringSpan(char* pData, std::size_t size) : m_pData(pData), m_size(size) {}
+        constexpr StringSpan(std::span<char> span) : m_pData(span.data()), m_size(span.size()) {}
         StringSpan(std::string& rhs) : m_pData(const_cast<char*>(rhs.data())), m_size(rhs.size()) {}
 
         operator StringView() const { return{m_pData, m_size}; }

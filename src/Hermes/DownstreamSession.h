@@ -45,15 +45,15 @@ namespace Hermes
             const ConnectionInfo& PeerConnectionInfo() const;
 
             void Connect(ISessionCallback&);
-            void Signal(const ServiceDescriptionData&, StringView rawXml);
-            void Signal(const BoardAvailableData&, StringView rawXml);
-            void Signal(const RevokeBoardAvailableData&, StringView rawXml);
-            void Signal(const TransportFinishedData&, StringView rawXml);
-            void Signal(const BoardForecastData&, StringView rawXml);
-            void Signal(const SendBoardInfoData&, StringView rawXml);
-            void Signal(const NotificationData&, StringView rawXml);
-            void Signal(const CommandData&, StringView rawXml);
-            void Signal(const CheckAliveData&, StringView rawXml);
+            void Signal(const ServiceDescriptionData&, std::string&& rawXml);
+            void Signal(const BoardAvailableData&, std::string&& rawXml);
+            void Signal(const RevokeBoardAvailableData&, std::string&& rawXml);
+            void Signal(const TransportFinishedData&, std::string&& rawXml);
+            void Signal(const BoardForecastData&, std::string&& rawXml);
+            void Signal(const SendBoardInfoData&, std::string&& rawXml);
+            void Signal(const NotificationData&, std::string&& rawXml);
+            void Signal(const CommandData&, std::string&& rawXml);
+            void Signal(const CheckAliveData&, std::string&& rawXml);
             void Disconnect();
 
         private:

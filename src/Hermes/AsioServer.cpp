@@ -75,9 +75,14 @@ namespace Hermes
             m_spSocket->StartReceiving();
         }
 
-        void Send(StringView message) override
+        void Send(std::string&& message) override
         {
-            m_spSocket->Send(message);
+            m_spSocket->Send(std::move(message));
+        }
+
+        asio::awaitable<void> SendAsync(std::string&& message) override
+        {
+            return m_spSocket->SendAsync(std::move(message));
         }
 
         void Close() override
@@ -129,7 +134,9 @@ namespace Hermes
             boost::system::error_code ecDummy;
             m_spResources->m_acceptor.cancel(ecDummy);
             m_spResources->m_acceptor.close(ecDummy);
-            Listen_();
+
+            asio::co_spawn(m_asioService.get_executor(), ListenAsync(), asio::detached);
+            //Listen_();
         }
 
         void StopListening() override
@@ -142,28 +149,51 @@ namespace Hermes
         // internals
     private:
 
-        void Listen_()
+        asio::awaitable<void> ListenAsync()
         {
+            auto spResources{ m_spResources };      //Assert ownership
+
             if (m_spResources->m_closed)
-                return;
+                co_return;
 
             if (!m_optionalConfiguration)
-                return;
+                co_return;
 
             auto& configuration = *m_optionalConfiguration;
-            m_service.Log(m_sessionId, "Listen_ on ", configuration.m_hostName,
-                ", port=", configuration.m_port);
 
-            if (!m_optionalConfiguration->m_hostName.empty())
+            while (!co_await TryListenAsync(configuration))
             {
-                asio::ip::tcp::resolver resolver(m_asioService);               
+                m_spResources->m_timer.expires_after(Hermes::GetSeconds(configuration.m_retryDelayInSeconds));
+                try
+                {
+                    co_await m_spResources->m_timer.async_wait();
+                }
+                catch (const boost::system::system_error&)
+                {
+                    co_return;
+                }
+                
+            }
+
+
+        }
+
+        asio::awaitable<bool> TryListenAsync(const NetworkConfiguration& configuration)
+        {
+            m_service.Log(m_sessionId, "ListenAsync on ", configuration.m_hostName, ", port=", configuration.m_port);
+
+            if (m_spResources->m_closed)
+                co_return true;
+
+            if (!configuration.m_hostName.empty())
+            {
+                asio::ip::tcp::resolver resolver(m_asioService);
                 boost::system::error_code ec;
-                resolver.resolve(asio::ip::tcp::v4(), configuration.m_hostName, "", ec);
+                co_await resolver.async_resolve(asio::ip::tcp::v4(), configuration.m_hostName, "", asio::redirect_error(ec));
                 if (ec)
                 {
-                    Alarm(ec, "Unable to resolve ", configuration.m_hostName);
-                    RetryLater_();
-                    return;
+                    Alarm(ec, "Unable to open accept port ", configuration.m_port);
+                    co_return false;
                 }
             }
 
@@ -174,78 +204,48 @@ namespace Hermes
             if (ec)
             {
                 Alarm(ec, "Unable to open accept port ", configuration.m_port);
-                RetryLater_();
-                return;
+                co_return false;
             }
-
-            // it appears to be robuster not to re-use, but instead to retry later
-            //m_acceptor.set_option(asio::ip::tcp::acceptor::reuse_address(true), ec);
-            //if (ec)
-            //{
-            //    m_asioHelper.Alarm(ec, "Unable to bind to re-use accepting port");
-            //    Retry_();
-            //    return;
-            //}
 
             m_spResources->m_acceptor.bind(endpoint, ec);
             if (ec)
             {
                 Alarm(ec, "Unable to bind to accept port ", configuration.m_port);
-                RetryLater_();
-                return;
+                co_return false;
             }
 
             m_spResources->m_acceptor.listen(asio::socket_base::max_listen_connections, ec);
             if (ec)
             {
                 Alarm(ec, "Unable to listen on accept port ", configuration.m_port);
-                RetryLater_();
-                return;
+                co_return false;
             }
-
-            AsyncAccept_();
-        }
-
-        void AsyncAccept_()
-        {
-            if (m_spResources->m_closed)
-                return;
-
-            if (!m_optionalConfiguration)
-                return;
-
-            auto& configuration = *m_optionalConfiguration;
-
-            m_service.Log(m_sessionId, "AsyncAccept_ on ", configuration.m_hostName,
-                ", port=", configuration.m_port);
 
             auto spSocket = std::make_shared<AsioSocket>(m_sessionId, configuration, m_service);
             spSocket->m_connectionInfo.m_port = configuration.m_port;
             auto& asioSocket = spSocket->m_socket;
-            m_spResources->m_acceptor.async_accept(asioSocket,
-                [this, spSocket = std::move(spSocket), spResources = m_spResources](const boost::system::error_code& ec) mutable
-            {
-                if (spResources->m_closed)
-                    return;
 
-                OnAccepted_(std::move(spSocket), ec);
-            });
+            while (!m_spResources->m_closed)
+            {
+                co_await m_spResources->m_acceptor.async_accept(asioSocket, asio::redirect_error(ec));
+                if (ec)
+                {
+                    if (ec == asio::error::operation_aborted)   //If aborted, don't retry, so return true
+                        co_return true;
+                    else
+                    {
+                        Alarm(ec, "Accept error on port ", m_optionalConfiguration->m_port);
+                        co_return false;
+                    }  
+                }
+                if(!co_await AcceptAsync(std::move(spSocket), configuration))
+                    co_return false;
+            }
+            co_return true;
         }
 
-        void OnAccepted_(AsioSocketSp&& spSocket, const boost::system::error_code& ec)
+        asio::awaitable<bool> AcceptAsync(AsioSocketSp&& spSocket, const NetworkConfiguration& configuration)
         {
-            if (ec)
-            {
-                if (ec == asio::error::operation_aborted)
-                    return;
-                if (!m_optionalConfiguration)
-                    return;
-
-                Alarm(ec, "Accept error on port ", m_optionalConfiguration->m_port);
-                RetryLater_();
-                return;
-            }
-
             // we have accepted, so increment the session id:
             m_sessionId = m_sessionId == std::numeric_limits<unsigned>::max() ? 1U : m_sessionId + 1U;
 
@@ -255,13 +255,11 @@ namespace Hermes
                 m_service.Warn(spSocket->m_sessionId, "Configuration of accepted socket no longer matches the current configuration");
                 NotificationData notification(ENotificationCode::eCONNECTION_RESET_BECAUSE_OF_CHANGED_CONFIGURATION,
                     ESeverity::eINFO, "ConfigurationChanged");
-                const std::string& xmlString = Serialize(notification);
-                spSocket->Send(xmlString);
-                AsyncAccept_();
-                return;
+                std::string xmlString = Serialize(notification);
+                co_await spSocket->SendAsync(std::move(xmlString));
+                co_return true;     //Just rerun the loop
             }
-            auto& configuration = *m_optionalConfiguration;
-            
+
             asio::ip::tcp::resolver resolver(m_asioService);
             boost::system::error_code ecResolve;
             const auto& endpoint = spSocket->m_socket.remote_endpoint();
@@ -269,10 +267,10 @@ namespace Hermes
             spSocket->m_connectionInfo.m_address = remoteAddress.to_string();
 
             // try and resolve the remote address to a name:
-            auto resolveResults = resolver.resolve(endpoint, ecResolve);
-            if (ec)
+            auto resolveResults = co_await resolver.async_resolve(endpoint, asio::redirect_error(ecResolve));
+            if (ecResolve)
             {
-                spSocket->Alarm(ec, "Unable to resolve ip address ", endpoint);
+                spSocket->Alarm(ecResolve, "Unable to resolve ip address ", endpoint);
             }
             else
             {
@@ -284,17 +282,16 @@ namespace Hermes
 
             if (!configuration.m_hostName.empty())
             {
-                auto results = resolver.resolve(asio::ip::tcp::v4(), configuration.m_hostName, "", ecResolve);
+                auto results = co_await resolver.async_resolve(asio::ip::tcp::v4(), configuration.m_hostName, "", asio::redirect_error(ecResolve));
                 if (ecResolve)
                 {
-                    spSocket->Alarm(ec, "Unable to resolve ", configuration.m_hostName);
+                    spSocket->Alarm(ecResolve, "Unable to resolve ", configuration.m_hostName);
                     NotificationData notification(ENotificationCode::eCONFIGURATION_ERROR, ESeverity::eERROR,
                         "Connection only allowed from a hostname which cannot be resolved: " + configuration.m_hostName);
-                    const std::string& xmlString = Serialize(notification);
-                    spSocket->Send(xmlString);
+                    std::string xmlString = Serialize(notification);
+                    co_await spSocket->SendAsync(std::move(xmlString));
                     spSocket->Close();
-                    RetryLater_();
-                    return;
+                    co_return false;
                 }
 
                 auto itAllowedEndpoint = results.cbegin();
@@ -312,43 +309,15 @@ namespace Hermes
                     m_service.Warn(m_sessionId, text);
 
                     NotificationData notification(ENotificationCode::eCONFIGURATION_ERROR, ESeverity::eWARNING, text);
-                    const std::string& xmlString = Serialize(notification);
-                    spSocket->Send(xmlString);
+                    std::string xmlString = Serialize(notification);
+                    co_await spSocket->SendAsync(std::move(xmlString));
                     spSocket->Close();
-                    AsyncAccept_();
-                    return;
+                    co_return true;
                 }
             }
 
             m_callback.OnAccepted(std::make_unique<ServerSocket>(std::move(spSocket)));
-            AsyncAccept_();
-        }
-
-        void RetryLater_()
-        {
-            if (m_spResources->m_closed)
-                return;
-
-            if (!m_optionalConfiguration)
-                return;
-
-            auto& configuration = *m_optionalConfiguration;
-
-            boost::system::error_code ecDummy;
-            m_spResources->m_acceptor.close(ecDummy);
-
-            
-            m_spResources->m_timer.expires_after(Hermes::GetSeconds(configuration.m_retryDelayInSeconds));
-            m_spResources->m_timer.async_wait([this, spResources = m_spResources](const boost::system::error_code& ec)
-            {
-                if (spResources->m_closed)
-                    return;
-
-                if (ec) // we were canccelled
-                    return;
-
-                Listen_();
-            });
+            co_return true;
         }
 
         void Close_()

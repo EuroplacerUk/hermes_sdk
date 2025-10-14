@@ -21,6 +21,7 @@ limitations under the License.
 #include <cstring>
 #include <ostream>
 #include <string>
+#include <span>
 
 // while we have not got std::string_view at our disposal, we make our own:
 
@@ -32,6 +33,7 @@ namespace Hermes
         constexpr StringView() = default;
         StringView(const char* pStr) : m_pData(pStr), m_size(std::strlen(pStr)) {}
         constexpr StringView(const char* pData, std::size_t size) : m_pData(pData), m_size(size) {}
+        constexpr StringView(std::span<char> span) : m_pData(span.data()), m_size(span.size()) {}
         StringView(const std::string& str) : m_pData(str.data()), m_size(str.size()) {}
         StringView& operator=(const std::string& str)
         {

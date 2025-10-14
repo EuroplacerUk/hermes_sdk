@@ -97,37 +97,37 @@ namespace Hermes
                 m_forward.Connect(std::move(wpOwner), *this);
             }
 
-            void Signal(const ServiceDescriptionData&, StringView rawXml) override
+            void Signal(const ServiceDescriptionData&, std::string&& rawXml) override
             {
                 switch (m_state)
                 {
                 case EState::eSERVICE_DESCRIPTION_DOWNSTREAM:
                     m_state = EState::eNOT_AVAILABLE_NOT_READY;
                     m_pCallback->OnState(m_state);
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                     return;
 
                 default:
                     if (DisconnectedDueToIllegalClientEvent_("ServiceDescription"))
                         return;
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                 }
             }
 
-            void Signal(const BoardAvailableData&, StringView rawXml) override
+            void Signal(const BoardAvailableData&, std::string&& rawXml) override
             {
                 switch (m_state)
                 {
                 case EState::eNOT_AVAILABLE_NOT_READY:
                     m_state = EState::eBOARD_AVAILABLE;
                     m_pCallback->OnState(m_state);
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                     return;
 
                 case EState::eMACHINE_READY:
                     m_state = EState::eAVAILABLE_AND_READY;
                     m_pCallback->OnState(m_state);
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                     return;
 
                 case EState::eTRANSPORTING:
@@ -137,24 +137,24 @@ namespace Hermes
                 default:
                     if (DisconnectedDueToIllegalClientEvent_("BoardAvailable"))
                         return;
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                 }
             }
 
-            void Signal(const RevokeBoardAvailableData&, StringView rawXml) override
+            void Signal(const RevokeBoardAvailableData&, std::string&& rawXml) override
             {
                 switch (m_state)
                 {
                 case EState::eBOARD_AVAILABLE:
                     m_state = EState::eNOT_AVAILABLE_NOT_READY;
                     m_pCallback->OnState(m_state);
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                     return;
 
                 case EState::eAVAILABLE_AND_READY:
                     m_state = EState::eMACHINE_READY;
                     m_pCallback->OnState(m_state);
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                     return;
 
                 case EState::eTRANSPORTING:
@@ -164,53 +164,53 @@ namespace Hermes
                 default:
                     if (DisconnectedDueToIllegalClientEvent_("RevokeBoardAvailable"))
                         return;
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                 }
             }
 
-            void Signal(const TransportFinishedData&, StringView rawXml) override
+            void Signal(const TransportFinishedData&, std::string&& rawXml) override
             {
                 switch (m_state)
                 {
                 case EState::eTRANSPORTING:
                     m_state = EState::eTRANSPORT_FINISHED;
                     m_pCallback->OnState(m_state);
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                     return;
 
                 case EState::eTRANSPORT_STOPPED:
                     m_state = EState::eNOT_AVAILABLE_NOT_READY;
                     m_pCallback->OnState(m_state);
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                     return;
 
                 default:
                     if (DisconnectedDueToIllegalClientEvent_("TransportFinished"))
                         return;
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                 }
             }
 
             // Board forecast is suppressed if we are not in a valid state for it.
             // This is different from other calls from client side in an illegal state
             // because from client perspective, it is very hand to handle it correctly.
-            void Signal(const BoardForecastData&, StringView rawXml) override
+            void Signal(const BoardForecastData&, std::string&&  rawXml) override
             {
                 switch (m_state)
                 {
                 case EState::eNOT_AVAILABLE_NOT_READY:
                 case EState::eMACHINE_READY:
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                     return;
 
                 default:
                     if (m_checkState == ECheckState::eSEND_AND_RECEIVE)
                         return;
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                 }
             }
 
-            void Signal(const SendBoardInfoData&, StringView rawXml) override
+            void Signal(const SendBoardInfoData&, std::string&& rawXml) override
             {
                 switch (m_state)
                 {
@@ -219,12 +219,12 @@ namespace Hermes
                     return;
 
                 default:
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                     return;
                 }
             }
 
-            void Signal(const NotificationData&, StringView rawXml) override
+            void Signal(const NotificationData&, std::string&& rawXml) override
             {
                 switch (m_state)
                 {
@@ -233,12 +233,12 @@ namespace Hermes
                     return;
 
                 default:
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                     return;
                 }
             }
 
-            void Signal(const CommandData&, StringView rawXml) override
+            void Signal(const CommandData&, std::string&& rawXml) override
             {
                 switch (m_state)
                 {
@@ -247,12 +247,12 @@ namespace Hermes
                     return;
 
                 default:
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                     return;
                 }
             }
 
-            void Signal(const CheckAliveData&, StringView rawXml) override
+            void Signal(const CheckAliveData&, std::string&& rawXml) override
             {
                 switch (m_state)
                 {
@@ -261,7 +261,7 @@ namespace Hermes
                     return;
 
                 default:
-                    m_forward.Signal(rawXml);
+                    m_forward.Signal(std::move(rawXml));
                     return;
                 }
             }

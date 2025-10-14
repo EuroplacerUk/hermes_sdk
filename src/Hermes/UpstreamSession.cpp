@@ -147,15 +147,15 @@ namespace Hermes
             m_spImpl->m_upStateMachine->Connect(m_spImpl, *m_spImpl);
         }
 
-        void Session::Signal(const ServiceDescriptionData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const MachineReadyData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const RevokeMachineReadyData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const StartTransportData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const StopTransportData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const QueryBoardInfoData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const NotificationData&  data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const CommandData&  data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const CheckAliveData&  data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
+        void Session::Signal(const ServiceDescriptionData& data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const MachineReadyData& data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const RevokeMachineReadyData& data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const StartTransportData& data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const StopTransportData& data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const QueryBoardInfoData& data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const NotificationData&  data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const CommandData&  data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
+        void Session::Signal(const CheckAliveData&  data, std::string&& rawXml) { m_spImpl->Signal_(data, std::move(rawXml)); }
 
         void Session::Disconnect()
         {

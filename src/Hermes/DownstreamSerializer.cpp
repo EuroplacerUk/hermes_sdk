@@ -81,19 +81,14 @@ namespace Hermes
                 m_socket.Connect(wpOwner, *this);
             }
 
-            void Signal(StringView rawXml)
+            void Signal(std::string&& rawXml) override
             {
-                m_socket.Send(rawXml);
+                m_socket.Send(std::move(rawXml));
             }
 
             void Disconnect() override
             {
                 m_socket.Close();
-            }
-
-            void Send_(StringView message)
-            {
-                m_socket.Send(message);
             }
         };
     }

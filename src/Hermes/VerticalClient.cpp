@@ -510,11 +510,11 @@ void SignalHermesVerticalClientRawXml(HermesVerticalClient* pVerticalClient, uin
 void ResetHermesVerticalClientRawXml(HermesVerticalClient* pVerticalClient, HermesStringView rawXml)
 {
     pVerticalClient->m_service.Log(0U, "ResetHermesVerticalClientRawXml");
-    pVerticalClient->m_service.Post([pVerticalClient, data = std::string(rawXml.m_pData, rawXml.m_size)]()
+    pVerticalClient->m_service.Post([pVerticalClient, data = std::string(rawXml.m_pData, rawXml.m_size)]() mutable
     {
         if (!data.empty() && pVerticalClient->m_upSession)
         {
-            pVerticalClient->m_upSession->Signal(NotificationData(), data);
+            pVerticalClient->m_upSession->Signal(NotificationData(), std::move(data));
         }
         pVerticalClient->Reset();
     });
