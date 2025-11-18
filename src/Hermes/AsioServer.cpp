@@ -221,12 +221,12 @@ namespace Hermes
                 co_return false;
             }
 
-            auto spSocket = std::make_shared<AsioSocket>(m_sessionId, configuration, m_service);
-            spSocket->m_connectionInfo.m_port = configuration.m_port;
-            auto& asioSocket = spSocket->m_socket;
-
             while (!m_spResources->m_closed)
             {
+                auto spSocket = std::make_shared<AsioSocket>(m_sessionId, configuration, m_service);
+                spSocket->m_connectionInfo.m_port = configuration.m_port;
+                auto& asioSocket = spSocket->m_socket;
+
                 co_await m_spResources->m_acceptor.async_accept(asioSocket, asio::redirect_error(ec));
                 if (ec)
                 {
