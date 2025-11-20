@@ -23,16 +23,18 @@ limitations under the License.
 
 namespace Hermes
 {
+    namespace Implementation
+    {
         struct ConfigurationServiceSerializer : IConfigurationServiceSerializer, ISocketCallback
         {
             unsigned m_sessionId;
             IAsioService& m_service;
             IServerSocket& m_socket;
             IConfigurationServiceSerializerCallback* m_pCallback = nullptr;
-            MessageDispatcher m_dispatcher{m_sessionId, m_service};
+            MessageDispatcher m_dispatcher{ m_sessionId, m_service };
             bool m_connected = false;
 
-            ConfigurationServiceSerializer(unsigned sessionId, IAsioService& service, 
+            ConfigurationServiceSerializer(unsigned sessionId, IAsioService& service,
                 IServerSocket& socket) :
                 m_sessionId(sessionId),
                 m_service(service),
@@ -100,9 +102,10 @@ namespace Hermes
 
         };
 
-    std::unique_ptr<IConfigurationServiceSerializer> CreateConfigurationServiceSerializer(unsigned sessionId,
-        IAsioService& service, IServerSocket& socket)
-    {
-        return std::make_unique<ConfigurationServiceSerializer>(sessionId, service, socket);
+        std::unique_ptr<IConfigurationServiceSerializer> CreateConfigurationServiceSerializer(unsigned sessionId,
+            IAsioService& service, IServerSocket& socket)
+        {
+            return std::make_unique<ConfigurationServiceSerializer>(sessionId, service, socket);
+        }
     }
 }

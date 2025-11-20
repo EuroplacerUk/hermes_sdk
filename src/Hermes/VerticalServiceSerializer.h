@@ -25,38 +25,38 @@ namespace Hermes
 {
     struct IAsioService;
     struct IServerSocket;
-
-    namespace VerticalService
+    namespace Implementation
     {
-        struct ISerializerCallback;
-
-        struct ISerializer
+        namespace VerticalService
         {
-            virtual void Connect(std::weak_ptr<void> wpOwner, ISerializerCallback&) = 0;
-            virtual void Signal(StringView rawXml) = 0;
-            virtual void Disconnect() = 0;
+            struct ISerializerCallback;
 
-            virtual ~ISerializer() = default;
-        };
+            struct ISerializer
+            {
+                virtual void Connect(std::weak_ptr<void> wpOwner, ISerializerCallback&) = 0;
+                virtual void Signal(StringView rawXml) = 0;
+                virtual void Disconnect() = 0;
 
-        struct ISerializerCallback
-        {
-            virtual void OnSocketConnected(const ConnectionInfo&) = 0;
-            virtual void On(const SupervisoryServiceDescriptionData&) = 0;
-            virtual void On(const GetConfigurationData&) = 0;
-            virtual void On(const SetConfigurationData&) = 0;
-            virtual void On(const SendWorkOrderInfoData&) = 0;
-            virtual void On(const NotificationData&) = 0;
-            virtual void On(const CheckAliveData&) = 0;
-            virtual void On(const QueryHermesCapabilitiesData&) = 0;
-            virtual void OnDisconnected(const Error&) = 0;
+                virtual ~ISerializer() = default;
+            };
 
-        protected:
-            ~ISerializerCallback() = default;
-        };
+            struct ISerializerCallback
+            {
+                virtual void OnSocketConnected(const ConnectionInfo&) = 0;
+                virtual void On(const SupervisoryServiceDescriptionData&) = 0;
+                virtual void On(const GetConfigurationData&) = 0;
+                virtual void On(const SetConfigurationData&) = 0;
+                virtual void On(const SendWorkOrderInfoData&) = 0;
+                virtual void On(const NotificationData&) = 0;
+                virtual void On(const CheckAliveData&) = 0;
+                virtual void On(const QueryHermesCapabilitiesData&) = 0;
+                virtual void OnDisconnected(const Error&) = 0;
 
-        std::unique_ptr<ISerializer> CreateSerializer(unsigned sessionId,
-            IAsioService&, IServerSocket&);
+            protected:
+                ~ISerializerCallback() = default;
+            };
+
+            std::unique_ptr<ISerializer> CreateSerializer(unsigned sessionId, IAsioService&, IServerSocket&);
+        }
     }
-
 }

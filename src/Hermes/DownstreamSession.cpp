@@ -30,140 +30,142 @@ limitations under the License.
 namespace Hermes
 {
     namespace asio = boost::asio;
-
-    namespace Downstream
+    namespace Implementation
     {
-        struct Session::Impl : IStateMachineCallback, std::enable_shared_from_this<Impl>
+        namespace Downstream
         {
-            unsigned m_id;
-            IAsioService& m_service;
-            DownstreamSettings m_configuration;
-
-            std::unique_ptr<IServerSocket> m_upSocket;
-            std::unique_ptr<ISerializer> m_upSerializer;
-            std::unique_ptr<IStateMachine> m_upStateMachine;
-            Optional<ServiceDescriptionData> m_optionalPeerServiceDescriptionData;
-            ConnectionInfo m_peerConnectionInfo;
-
-            ISessionCallback* m_pCallback{nullptr};
-            bool m_hasServiceDescriptionData{false};
-
-            Impl(std::unique_ptr<IServerSocket>&& upSocket, IAsioService& service, const DownstreamSettings& configuration) :
-                m_id(upSocket->SessionId()),
-                m_service(service),
-                m_configuration(configuration),
-                m_upSocket(std::move(upSocket))
+            struct Session::Impl : IStateMachineCallback, std::enable_shared_from_this<Impl>
             {
-                m_service.Log(m_id, "DownstreamSession()");
+                unsigned m_id;
+                IAsioService& m_service;
+                DownstreamSettings m_configuration;
+
+                std::unique_ptr<IServerSocket> m_upSocket;
+                std::unique_ptr<ISerializer> m_upSerializer;
+                std::unique_ptr<IStateMachine> m_upStateMachine;
+                Optional<ServiceDescriptionData> m_optionalPeerServiceDescriptionData;
+                ConnectionInfo m_peerConnectionInfo;
+
+                ISessionCallback* m_pCallback{ nullptr };
+                bool m_hasServiceDescriptionData{ false };
+
+                Impl(std::unique_ptr<IServerSocket>&& upSocket, IAsioService& service, const DownstreamSettings& configuration) :
+                    m_id(upSocket->SessionId()),
+                    m_service(service),
+                    m_configuration(configuration),
+                    m_upSocket(std::move(upSocket))
+                {
+                    m_service.Log(m_id, "DownstreamSession()");
+                }
+
+                ~Impl()
+                {
+                    m_service.Log(m_id, "~DownstreamSession()");
+                }
+
+                //============= implementation of IStateMachineCallback ============
+                void OnSocketConnected(EState state, const ConnectionInfo& connectionInfo) override
+                {
+                    m_peerConnectionInfo = connectionInfo;
+                    if (!m_pCallback)
+                        return;
+
+                    m_pCallback->OnSocketConnected(m_id, state, connectionInfo);
+                }
+
+                template<class DataT> void Signal_(const DataT& data, StringView rawXml)
+                {
+                    m_upStateMachine->Signal(data, rawXml);
+                }
+
+                template<class DataT> void On_(EState state, const DataT& data)
+                {
+                    if (!m_pCallback)
+                        return;
+
+                    m_pCallback->On(m_id, state, data);
+                }
+
+                void On(EState state, const ServiceDescriptionData& data)
+                {
+                    m_optionalPeerServiceDescriptionData = data;
+                    On_(state, data);
+                }
+
+                void On(EState state, const MachineReadyData& data) override { On_(state, data); }
+                void On(EState state, const RevokeMachineReadyData& data) override { On_(state, data); }
+                void On(EState state, const StartTransportData& data) override { On_(state, data); }
+                void On(EState state, const StopTransportData& data) override { On_(state, data); }
+                void On(EState state, const QueryBoardInfoData& data) override { On_(state, data); }
+                void On(EState state, const NotificationData& data) override { On_(state, data); }
+                void On(EState state, const CommandData& data) override { On_(state, data); }
+                void On(EState state, const CheckAliveData& data) override { On_(state, data); }
+                void OnState(EState state) override
+                {
+                    if (!m_pCallback)
+                        return;
+
+                    m_pCallback->OnState(m_id, state);
+                }
+
+                void OnDisconnected(EState state, const Error& data) override
+                {
+                    if (!m_pCallback)
+                        return;
+
+                    auto* pCallback = m_pCallback;
+                    m_pCallback = nullptr;
+                    pCallback->OnDisconnected(m_id, state, data);
+                }
+            };
+
+
+            Session::Session(std::unique_ptr<IServerSocket>&& upSocket, IAsioService& service,
+                const DownstreamSettings& configuration)
+            {
+                auto sessionId = upSocket->SessionId();
+                m_spImpl = std::make_shared<Impl>(std::move(upSocket), service, configuration);
+                m_spImpl->m_upSerializer = CreateSerializer(sessionId, service, *m_spImpl->m_upSocket);
+                m_spImpl->m_upStateMachine = CreateStateMachine(sessionId, service, *m_spImpl->m_upSerializer, configuration.m_checkState);
             }
 
-            ~Impl()
+            Session::~Session()
             {
-                m_service.Log(m_id, "~DownstreamSession()");
-            }
-
-            //============= implementation of IStateMachineCallback ============
-            void OnSocketConnected(EState state, const ConnectionInfo& connectionInfo) override 
-            { 
-                m_peerConnectionInfo = connectionInfo;
-                if (!m_pCallback)
+                if (!m_spImpl)
                     return;
 
-                m_pCallback->OnSocketConnected(m_id, state, connectionInfo);
+                m_spImpl->m_pCallback = nullptr;
             }
 
-            template<class DataT> void Signal_(const DataT& data, StringView rawXml)
+            unsigned Session::Id() const { return m_spImpl->m_id; }
+            const Optional<ServiceDescriptionData>& Session::OptionalPeerServiceDescriptionData() const
             {
-                m_upStateMachine->Signal(data, rawXml);
+                return m_spImpl->m_optionalPeerServiceDescriptionData;
             }
 
-            template<class DataT> void On_(EState state, const DataT& data)
+            const ConnectionInfo& Session::PeerConnectionInfo() const { return m_spImpl->m_peerConnectionInfo; }
+
+            void Session::Connect(ISessionCallback& callback)
             {
-                if (!m_pCallback)
-                    return;
-
-                m_pCallback->On(m_id, state, data);
+                m_spImpl->m_pCallback = &callback;
+                m_spImpl->m_upStateMachine->Connect(m_spImpl, *m_spImpl);
             }
 
-            void On(EState state, const ServiceDescriptionData& data)
-            { 
-                m_optionalPeerServiceDescriptionData = data;
-                On_(state, data);
-            }
+            void Session::Signal(const ServiceDescriptionData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
+            void Session::Signal(const BoardAvailableData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
+            void Session::Signal(const RevokeBoardAvailableData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
+            void Session::Signal(const TransportFinishedData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
+            void Session::Signal(const BoardForecastData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
+            void Session::Signal(const SendBoardInfoData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
+            void Session::Signal(const NotificationData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
+            void Session::Signal(const CommandData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
+            void Session::Signal(const CheckAliveData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
 
-            void On(EState state, const MachineReadyData& data) override { On_(state, data); }
-            void On(EState state, const RevokeMachineReadyData& data) override { On_(state, data); }
-            void On(EState state, const StartTransportData& data) override { On_(state, data); }
-            void On(EState state, const StopTransportData& data) override { On_(state, data); }
-            void On(EState state, const QueryBoardInfoData& data) override { On_(state, data); }
-            void On(EState state, const NotificationData& data) override { On_(state, data); }
-            void On(EState state, const CommandData& data) override { On_(state, data); }
-            void On(EState state, const CheckAliveData& data) override { On_(state, data); }
-            void OnState(EState state) override
+            void Session::Disconnect()
             {
-                if (!m_pCallback)
-                    return;
-
-                m_pCallback->OnState(m_id, state);
+                m_spImpl->m_pCallback = nullptr;
+                m_spImpl->m_upStateMachine->Disconnect();
             }
-
-            void OnDisconnected(EState state, const Error& data) override
-            {
-                if (!m_pCallback)
-                    return;
-
-                auto* pCallback = m_pCallback;
-                m_pCallback = nullptr;
-                pCallback->OnDisconnected(m_id, state, data);
-            }
-        };
-
-
-        Session::Session(std::unique_ptr<IServerSocket>&& upSocket, IAsioService& service,
-            const DownstreamSettings& configuration)
-        {
-            auto sessionId = upSocket->SessionId();
-            m_spImpl = std::make_shared<Impl>(std::move(upSocket), service, configuration);
-            m_spImpl->m_upSerializer = CreateSerializer(sessionId, service, *m_spImpl->m_upSocket);
-            m_spImpl->m_upStateMachine = CreateStateMachine(sessionId, service, *m_spImpl->m_upSerializer, configuration.m_checkState);
-        }
-
-        Session::~Session()
-        {
-            if (!m_spImpl)
-                return;
-
-            m_spImpl->m_pCallback = nullptr;
-        }
-
-        unsigned Session::Id() const { return m_spImpl->m_id; }
-        const Optional<ServiceDescriptionData>& Session::OptionalPeerServiceDescriptionData() const 
-        { 
-            return m_spImpl->m_optionalPeerServiceDescriptionData; 
-        }
-        
-        const ConnectionInfo& Session::PeerConnectionInfo() const { return m_spImpl->m_peerConnectionInfo; }
-
-        void Session::Connect(ISessionCallback& callback)
-        {
-            m_spImpl->m_pCallback = &callback;
-            m_spImpl->m_upStateMachine->Connect(m_spImpl, *m_spImpl);
-        }
-
-        void Session::Signal(const ServiceDescriptionData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const BoardAvailableData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const RevokeBoardAvailableData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const TransportFinishedData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const BoardForecastData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const SendBoardInfoData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const NotificationData&  data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const CommandData&  data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-        void Session::Signal(const CheckAliveData&  data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
-
-        void Session::Disconnect()
-        {
-            m_spImpl->m_pCallback = nullptr;
-            m_spImpl->m_upStateMachine->Disconnect(); 
         }
     }
 }

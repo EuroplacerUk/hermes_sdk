@@ -28,15 +28,47 @@ namespace asio = boost::asio;
 
 namespace Hermes
 {
+    struct TraceCallbackAdapter : ITraceCallback
+    {
+        TraceCallbackAdapter(const HermesTraceCallback& callback) :
+            m_traceCallback(callback)
+        {
+
+        }
+        void OnTrace(unsigned sessionId, ETraceType tt, StringView trace)
+        {
+            m_traceCallback(sessionId, ToC(tt), ToC(trace));
+        }
+
+    private:
+        ApiCallback<HermesTraceCallback> m_traceCallback;
+    };
+
+    struct TraceCallbackHolder : CallbackHolder<ITraceCallback, TraceCallbackAdapter, HermesTraceCallback>
+    {
+        TraceCallbackHolder(const HermesTraceCallback& callback) : CallbackHolder(callback)
+        {
+        }
+
+        TraceCallbackHolder(ITraceCallback& callback) : CallbackHolder(callback)
+        {
+        }
+    };
+
     struct Service : IAsioService
     {
         asio::io_context m_asioService;
         asio::executor_work_guard<asio::io_context::executor_type> m_asioWork{asio::make_work_guard(m_asioService) };
-        ApiCallback<HermesTraceCallback> m_traceCallback;
+        TraceCallbackHolder m_traceCallback;
 
         explicit Service(HermesTraceCallback traceCallback) :
             m_traceCallback(traceCallback)
         {}
+
+        explicit Service(ITraceCallback& traceCallback) :
+            m_traceCallback(traceCallback)
+        {
+        }
 
         ~Service()
         {}
@@ -67,7 +99,7 @@ namespace Hermes
 
         void Trace(ETraceType type, unsigned sessionId, StringView trace) override
         {
-            m_traceCallback(sessionId, ToC(type), ToC(trace));
+            m_traceCallback->OnTrace(sessionId, type, trace);
         }
 
         boost::asio::io_context& GetUnderlyingService() override

@@ -26,13 +26,6 @@ limitations under the License.
 namespace Hermes
 {
     //======================= ConfigurationClient interface =====================================
-    struct ITraceCallback
-    {
-        virtual void OnTrace(unsigned sessionId, ETraceType, StringView trace) = 0;
-
-    protected:
-        ~ITraceCallback() {}
-    };
 
     std::pair<CurrentConfigurationData, Error> GetConfiguration(StringView hostName, // host (e.g. ip address) to connect with
         unsigned timeoutInSeconds, // timeout to connect

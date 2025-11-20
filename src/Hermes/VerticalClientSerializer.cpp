@@ -23,79 +23,82 @@ limitations under the License.
 
 namespace Hermes
 {
-    namespace VerticalClient
+    namespace Implementation
     {
-        struct Serializer : ISerializer, ISocketCallback
+        namespace VerticalClient
         {
-            unsigned m_sessionId;
-            IAsioService& m_service;
-            IClientSocket& m_socket;
-            ISerializerCallback* m_pCallback = nullptr;
-            MessageDispatcher m_dispatcher{ m_sessionId, m_service };
-
-            Serializer(unsigned sessionId, IAsioService& service, IClientSocket& socket) :
-                m_sessionId(sessionId),
-                m_service(service),
-                m_socket(socket)
+            struct Serializer : ISerializer, ISocketCallback
             {
-                m_dispatcher.Add<SupervisoryServiceDescriptionData>([this](const auto& data) { m_pCallback->On(data); });
-                m_dispatcher.Add<CheckAliveData>([this](const auto& data) { m_pCallback->On(data); });
-                m_dispatcher.Add<NotificationData>([this](const auto& data) { m_pCallback->On(data); });
-                m_dispatcher.Add<CurrentConfigurationData>([this](const auto& data) { m_pCallback->On(data); });
-                m_dispatcher.Add<BoardArrivedData>([this](const auto& data) { m_pCallback->On(data); });
-                m_dispatcher.Add<BoardDepartedData>([this](const auto& data) { m_pCallback->On(data); });
-                m_dispatcher.Add<QueryWorkOrderInfoData>([this](const auto& data) { m_pCallback->On(data); });
-                m_dispatcher.Add<ReplyWorkOrderInfoData>([this](const auto& data) { m_pCallback->On(data); });
-                m_dispatcher.Add<SendHermesCapabilitiesData>([this](const auto& data) { m_pCallback->On(data); });
-            }
+                unsigned m_sessionId;
+                IAsioService& m_service;
+                IClientSocket& m_socket;
+                ISerializerCallback* m_pCallback = nullptr;
+                MessageDispatcher m_dispatcher{ m_sessionId, m_service };
 
-            // ISocketCallback
-            void OnConnected(const ConnectionInfo& connectionInfo) override
-            {
-                m_pCallback->OnSocketConnected(connectionInfo);
-            }
+                Serializer(unsigned sessionId, IAsioService& service, IClientSocket& socket) :
+                    m_sessionId(sessionId),
+                    m_service(service),
+                    m_socket(socket)
+                {
+                    m_dispatcher.Add<SupervisoryServiceDescriptionData>([this](const auto& data) { m_pCallback->On(data); });
+                    m_dispatcher.Add<CheckAliveData>([this](const auto& data) { m_pCallback->On(data); });
+                    m_dispatcher.Add<NotificationData>([this](const auto& data) { m_pCallback->On(data); });
+                    m_dispatcher.Add<CurrentConfigurationData>([this](const auto& data) { m_pCallback->On(data); });
+                    m_dispatcher.Add<BoardArrivedData>([this](const auto& data) { m_pCallback->On(data); });
+                    m_dispatcher.Add<BoardDepartedData>([this](const auto& data) { m_pCallback->On(data); });
+                    m_dispatcher.Add<QueryWorkOrderInfoData>([this](const auto& data) { m_pCallback->On(data); });
+                    m_dispatcher.Add<ReplyWorkOrderInfoData>([this](const auto& data) { m_pCallback->On(data); });
+                    m_dispatcher.Add<SendHermesCapabilitiesData>([this](const auto& data) { m_pCallback->On(data); });
+                }
 
-            void OnReceived(StringSpan xmlData) override
-            {
-                auto error = m_dispatcher.Dispatch(xmlData);
-                if (!error)
-                    return;
+                // ISocketCallback
+                void OnConnected(const ConnectionInfo& connectionInfo) override
+                {
+                    m_pCallback->OnSocketConnected(connectionInfo);
+                }
 
-                error = m_service.Alarm(m_sessionId, EErrorCode::ePEER_ERROR, error.m_text);
-                Signal(Serialize(NotificationData(ENotificationCode::ePROTOCOL_ERROR, ESeverity::eFATAL, error.m_text)));
-                m_socket.Close();
-                m_pCallback->OnDisconnected(error);
-            }
+                void OnReceived(StringSpan xmlData) override
+                {
+                    auto error = m_dispatcher.Dispatch(xmlData);
+                    if (!error)
+                        return;
 
-            void OnDisconnected(const Error& error) override
-            {
-                m_pCallback->OnDisconnected(error);
-            }
+                    error = m_service.Alarm(m_sessionId, EErrorCode::ePEER_ERROR, error.m_text);
+                    Signal(Serialize(NotificationData(ENotificationCode::ePROTOCOL_ERROR, ESeverity::eFATAL, error.m_text)));
+                    m_socket.Close();
+                    m_pCallback->OnDisconnected(error);
+                }
+
+                void OnDisconnected(const Error& error) override
+                {
+                    m_pCallback->OnDisconnected(error);
+                }
 
 
-            //============== VerticalService::ISerializer ================================
-            void Connect(std::weak_ptr<void> wpOwner, ISerializerCallback& callback) override
-            {
-                assert(!m_pCallback);
-                m_pCallback = &callback;
-                m_socket.Connect(wpOwner, *this);
-            }
+                //============== VerticalService::ISerializer ================================
+                void Connect(std::weak_ptr<void> wpOwner, ISerializerCallback& callback) override
+                {
+                    assert(!m_pCallback);
+                    m_pCallback = &callback;
+                    m_socket.Connect(wpOwner, *this);
+                }
 
-            void Signal(StringView rawXml)
-            {
-                m_socket.Send(rawXml);
-            }
+                void Signal(StringView rawXml)
+                {
+                    m_socket.Send(rawXml);
+                }
 
-            void Disconnect() override
-            {
-                m_socket.Close();
-            }
-        };
-    }
+                void Disconnect() override
+                {
+                    m_socket.Close();
+                }
+            };
+        }
 
-    std::unique_ptr<VerticalClient::ISerializer> VerticalClient::CreateSerializer(unsigned sessionId, IAsioService& service,
-        IClientSocket& socket)
-    {
-        return std::make_unique<VerticalClient::Serializer>(sessionId, service, socket);
+        std::unique_ptr<VerticalClient::ISerializer> VerticalClient::CreateSerializer(unsigned sessionId, IAsioService& service,
+            IClientSocket& socket)
+        {
+            return std::make_unique<VerticalClient::Serializer>(sessionId, service, socket);
+        }
     }
 }

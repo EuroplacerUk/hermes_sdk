@@ -26,36 +26,15 @@ limitations under the License.
 #include <cassert>
 #include <memory>
 
+#include <Connection/VerticalClient.hpp>
+
 using namespace Hermes;
-using namespace Hermes::VerticalClient;
+using namespace Hermes::Implementation::VerticalClient;
 
-struct HermesVerticalClient : ISessionCallback
+struct VerticalClientCallbackAdapter : IVerticalClientCallback
 {
-    Service m_service;
-    asio::system_timer m_timer{ m_service.GetUnderlyingService() };
-    VerticalClientSettings m_settings;
-
-    unsigned m_sessionId{ 0U };
-    unsigned m_connectedSessionId{ 0U };
-
-    ApiCallback<HermesVerticalConnectedCallback> m_connectedCallback;
-    ApiCallback<HermesSupervisoryServiceDescriptionCallback> m_serviceDescriptionCallback;
-    ApiCallback<HermesBoardArrivedCallback> m_boardArrivedCallback;
-    ApiCallback<HermesBoardDepartedCallback> m_boardDepartedCallback;
-    ApiCallback<HermesQueryWorkOrderInfoCallback> m_queryWorkOrderInfoCallback;
-    ApiCallback<HermesReplyWorkOrderInfoCallback> m_replyWorkOrderInfoCallback;
-    ApiCallback<HermesCurrentConfigurationCallback> m_currentConfigurationCallback;
-    ApiCallback<HermesSendHermesCapabilitiesCallback> m_sendHermesCapabilitiesCallback;
-    ApiCallback<HermesNotificationCallback> m_notificationCallback;
-    ApiCallback<HermesCheckAliveCallback> m_checkAliveCallback;
-    ApiCallback<HermesVerticalDisconnectedCallback> m_disconnectedCallback;
-
-    std::unique_ptr<Session> m_upSession;
-
-    bool m_enabled{ false };
-
-    HermesVerticalClient(const HermesVerticalClientCallbacks& callbacks) :
-        m_service(callbacks.m_traceCallback),
+    VerticalClientCallbackAdapter(const HermesVerticalClientCallbacks& callbacks) :
+        m_traceCallback(callbacks.m_traceCallback),
         m_connectedCallback(callbacks.m_connectedCallback),
         m_serviceDescriptionCallback(callbacks.m_serviceDescriptionCallback),
         m_boardArrivedCallback(callbacks.m_boardArrivedCallback),
@@ -67,6 +46,115 @@ struct HermesVerticalClient : ISessionCallback
         m_notificationCallback(callbacks.m_notificationCallback),
         m_checkAliveCallback(callbacks.m_checkAliveCallback),
         m_disconnectedCallback(callbacks.m_disconnectedCallback)
+    {
+
+    }
+
+    void OnConnected(unsigned sessionId, EVerticalState state, const ConnectionInfo& in_data) override {
+        const Converter2C<ConnectionInfo> converter(in_data);
+        m_connectedCallback(sessionId, ToC(state), converter.CPointer());
+    };
+    void On(unsigned sessionId, EVerticalState state, const SupervisoryServiceDescriptionData& in_data) override
+    {
+        const Converter2C<SupervisoryServiceDescriptionData> converter(in_data);
+        m_serviceDescriptionCallback(sessionId, ToC(state), converter.CPointer());
+    }
+    void On(unsigned sessionId, const BoardArrivedData& in_data) override
+    {
+        const Converter2C<BoardArrivedData> configurationConverter(in_data);
+        m_boardArrivedCallback(sessionId, configurationConverter.CPointer());
+    }
+    void On(unsigned sessionId, const BoardDepartedData& in_data) override
+    {
+        const Converter2C<BoardDepartedData> configurationConverter(in_data);
+        m_boardDepartedCallback(sessionId, configurationConverter.CPointer());
+    }
+    void On(unsigned sessionId, const QueryWorkOrderInfoData& in_data) override
+    {
+        const Converter2C<QueryWorkOrderInfoData> converter(in_data);
+        m_queryWorkOrderInfoCallback(sessionId, converter.CPointer());
+    }
+    void On(unsigned sessionId, const ReplyWorkOrderInfoData& in_data) override
+    {
+        const Converter2C<ReplyWorkOrderInfoData> converter(in_data);
+        m_replyWorkOrderInfoCallback(sessionId, converter.CPointer());
+    }
+    void On(unsigned sessionId, const CurrentConfigurationData& in_data) override
+    {
+        const Converter2C<CurrentConfigurationData> converter(in_data);
+        m_currentConfigurationCallback(sessionId, converter.CPointer());
+    }
+    void On(unsigned sessionId, const SendHermesCapabilitiesData& in_data) override
+    {
+        const Converter2C<SendHermesCapabilitiesData> converter(in_data);
+        m_sendHermesCapabilitiesCallback(sessionId, converter.CPointer());
+    }
+
+    void OnDisconnected(unsigned sessionId, EVerticalState state, const Error& in_data) override
+    {
+        const Converter2C<Error> converter(in_data);
+        m_disconnectedCallback(sessionId, ToC(state), converter.CPointer());
+    }
+
+    void On(unsigned sessionId, const NotificationData& in_data) override
+    {
+        const Converter2C<NotificationData> converter(in_data);
+        m_notificationCallback(sessionId, converter.CPointer());
+    }
+    void On(unsigned sessionId, const CheckAliveData& in_data) override
+    {
+        const Converter2C<CheckAliveData> converter(in_data);
+        m_checkAliveCallback(sessionId, converter.CPointer());
+    }
+    void OnTrace(unsigned sessionId, ETraceType traceType, StringView trace) override
+    {
+        m_traceCallback(sessionId, ToC(traceType), ToC(trace));
+    }
+
+private:
+    ApiCallback<HermesTraceCallback> m_traceCallback;
+    ApiCallback<HermesVerticalConnectedCallback> m_connectedCallback;
+    ApiCallback<HermesSupervisoryServiceDescriptionCallback> m_serviceDescriptionCallback;
+    ApiCallback<HermesBoardArrivedCallback> m_boardArrivedCallback;
+    ApiCallback<HermesBoardDepartedCallback> m_boardDepartedCallback;
+    ApiCallback<HermesQueryWorkOrderInfoCallback> m_queryWorkOrderInfoCallback;
+    ApiCallback<HermesReplyWorkOrderInfoCallback> m_replyWorkOrderInfoCallback;
+    ApiCallback<HermesCurrentConfigurationCallback> m_currentConfigurationCallback;
+    ApiCallback<HermesSendHermesCapabilitiesCallback> m_sendHermesCapabilitiesCallback;
+    ApiCallback<HermesNotificationCallback> m_notificationCallback;
+    ApiCallback<HermesCheckAliveCallback> m_checkAliveCallback;
+    ApiCallback<HermesVerticalDisconnectedCallback> m_disconnectedCallback;
+};
+
+struct VerticalClientCallbackHolder : CallbackHolder<IVerticalClientCallback, VerticalClientCallbackAdapter, HermesVerticalClientCallbacks>
+{
+    VerticalClientCallbackHolder(const HermesVerticalClientCallbacks& callbacks) : CallbackHolder(callbacks)
+    {
+    }
+
+    VerticalClientCallbackHolder(IVerticalClientCallback& callbacks) : CallbackHolder(callbacks)
+    {
+    }
+};
+
+struct HermesVerticalClient : ISessionCallback
+{
+    Service m_service;
+    asio::system_timer m_timer{ m_service.GetUnderlyingService() };
+    VerticalClientSettings m_settings;
+
+    unsigned m_sessionId{ 0U };
+    unsigned m_connectedSessionId{ 0U };
+
+    VerticalClientCallbackHolder m_callbacks;
+
+    std::unique_ptr<Session> m_upSession;
+
+    bool m_enabled{ false };
+
+    HermesVerticalClient(VerticalClientCallbackHolder&& callbacks) :
+        m_service(*callbacks),
+        m_callbacks { callbacks }
     {
         m_service.Inform(0U, "Created");
     }
@@ -131,8 +219,7 @@ struct HermesVerticalClient : ISessionCallback
             return;
 
         m_connectedSessionId = pSession->Id();
-        const Converter2C<ConnectionInfo> converter(in_data);
-        m_connectedCallback(pSession->Id(), ToC(state), converter.CPointer());
+        m_callbacks->OnConnected(m_connectedSessionId, state, in_data);
     }
 
     void On(unsigned sessionId, EVerticalState state, const SupervisoryServiceDescriptionData& in_data) override
@@ -141,8 +228,7 @@ struct HermesVerticalClient : ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<SupervisoryServiceDescriptionData> converter(in_data);
-        m_serviceDescriptionCallback(pSession->Id(), ToC(state), converter.CPointer());
+        m_callbacks->On(sessionId, state, in_data);
     }
 
     void On(unsigned sessionId, EVerticalState, const BoardArrivedData& in_data) override
@@ -151,8 +237,7 @@ struct HermesVerticalClient : ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<BoardArrivedData> converter(in_data);
-        m_boardArrivedCallback(sessionId, converter.CPointer());
+        m_callbacks->On(sessionId, in_data);
     }
 
     void On(unsigned sessionId, EVerticalState, const BoardDepartedData& in_data) override
@@ -161,8 +246,7 @@ struct HermesVerticalClient : ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<BoardDepartedData> converter(in_data);
-        m_boardDepartedCallback(sessionId, converter.CPointer());
+        m_callbacks->On(sessionId, in_data);
     }
 
     void On(unsigned sessionId, EVerticalState, const QueryWorkOrderInfoData& in_data) override
@@ -171,8 +255,7 @@ struct HermesVerticalClient : ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<QueryWorkOrderInfoData> converter(in_data);
-        m_queryWorkOrderInfoCallback(sessionId, converter.CPointer());
+        m_callbacks->On(sessionId, in_data);
     }
 
     void On(unsigned sessionId, EVerticalState, const ReplyWorkOrderInfoData& in_data) override
@@ -181,8 +264,7 @@ struct HermesVerticalClient : ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<ReplyWorkOrderInfoData> converter(in_data);
-        m_replyWorkOrderInfoCallback(sessionId, converter.CPointer());
+        m_callbacks->On(sessionId, in_data);
     }
 
     void On(unsigned sessionId, EVerticalState, const CurrentConfigurationData& in_data) override
@@ -191,8 +273,7 @@ struct HermesVerticalClient : ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<CurrentConfigurationData> converter(in_data);
-        m_currentConfigurationCallback(sessionId, converter.CPointer());
+        m_callbacks->On(sessionId, in_data);
     }
 
     void On(unsigned sessionId, EVerticalState, const SendHermesCapabilitiesData& in_data) override
@@ -201,9 +282,7 @@ struct HermesVerticalClient : ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<SendHermesCapabilitiesData> converter(in_data);
-
-        m_sendHermesCapabilitiesCallback(sessionId, converter.CPointer());
+        m_callbacks->On(sessionId, in_data);
     }
 
     void On(unsigned sessionId, EVerticalState, const NotificationData& in_data) override
@@ -212,8 +291,7 @@ struct HermesVerticalClient : ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<NotificationData> converter(in_data);
-        m_notificationCallback(sessionId, converter.CPointer());
+        m_callbacks->On(sessionId, in_data);
     }
 
     void On(unsigned sessionId, EVerticalState, const CheckAliveData& in_data) override
@@ -230,8 +308,7 @@ struct HermesVerticalClient : ISessionCallback
             data.m_optionalType = ECheckAliveType::ePONG;
             m_service.Post([this, sessionId, data = std::move(data)]() { Signal(sessionId, data, Serialize(data)); });
         }
-        const Converter2C<CheckAliveData> converter(in_data);
-        m_checkAliveCallback(sessionId, converter.CPointer());
+        m_callbacks->On(sessionId, in_data);
     }
 
     void OnDisconnected(unsigned sessionId, EVerticalState state, const Error& error) override
@@ -250,8 +327,7 @@ struct HermesVerticalClient : ISessionCallback
         }
 
         m_upSession.reset();
-        const Converter2C<Error> converter(error);
-        m_disconnectedCallback(sessionId, ToC(state), converter.CPointer());
+        m_callbacks->OnDisconnected(sessionId, state, error);
     }
 
     void Reset()
@@ -294,8 +370,7 @@ struct HermesVerticalClient : ISessionCallback
 
         m_connectedSessionId = 0U;
         Error error;
-        const Converter2C<Error> converter(error);
-        m_disconnectedCallback(sessionId, eHERMES_VERTICAL_STATE_DISCONNECTED, converter.CPointer());
+        m_callbacks->OnDisconnected(sessionId, EVerticalState::eDISCONNECTED, error);
     }
 
     void RemoveSession_(const NotificationData& data)
@@ -339,10 +414,14 @@ struct HermesVerticalClient : ISessionCallback
 };
 
 //===================== implementation of public C functions =====================
+HermesVerticalClient* Hermes::CreateHermesVerticalClient(IVerticalClientCallback& callback)
+{
+    return new HermesVerticalClient(VerticalClientCallbackHolder{ callback });
+}
 
 HermesVerticalClient* CreateHermesVerticalClient(const HermesVerticalClientCallbacks* pCallbacks)
 {
-    return new HermesVerticalClient(*pCallbacks);
+    return new HermesVerticalClient(VerticalClientCallbackHolder{ *pCallbacks });
 }
 
 void RunHermesVerticalClient(HermesVerticalClient* pVerticalClient)

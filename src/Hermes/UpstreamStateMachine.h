@@ -24,48 +24,52 @@ namespace Hermes
 {
     struct IAsioService;
 
-    namespace Upstream
+    namespace Implementation
     {
-        struct ISerializer;
-        struct IStateMachineCallback;
-        struct IStateMachine
+
+        namespace Upstream
         {
-            virtual void Connect(std::weak_ptr<void> wpOwner, IStateMachineCallback&) = 0;
-            virtual void Signal(const ServiceDescriptionData&, StringView rawXml) = 0;
-            virtual void Signal(const MachineReadyData&, StringView rawXml) = 0;
-            virtual void Signal(const RevokeMachineReadyData&, StringView rawXml) = 0;
-            virtual void Signal(const StartTransportData&, StringView rawXml) = 0;
-            virtual void Signal(const StopTransportData&, StringView rawXml) = 0;
-            virtual void Signal(const QueryBoardInfoData&, StringView rawXml) = 0;
-            virtual void Signal(const NotificationData&, StringView rawXml) = 0;
-            virtual void Signal(const CommandData&, StringView rawXml) = 0;
-            virtual void Signal(const CheckAliveData&, StringView rawXml) = 0;
-            virtual void Disconnect() = 0;
+            struct ISerializer;
+            struct IStateMachineCallback;
+            struct IStateMachine
+            {
+                virtual void Connect(std::weak_ptr<void> wpOwner, IStateMachineCallback&) = 0;
+                virtual void Signal(const ServiceDescriptionData&, StringView rawXml) = 0;
+                virtual void Signal(const MachineReadyData&, StringView rawXml) = 0;
+                virtual void Signal(const RevokeMachineReadyData&, StringView rawXml) = 0;
+                virtual void Signal(const StartTransportData&, StringView rawXml) = 0;
+                virtual void Signal(const StopTransportData&, StringView rawXml) = 0;
+                virtual void Signal(const QueryBoardInfoData&, StringView rawXml) = 0;
+                virtual void Signal(const NotificationData&, StringView rawXml) = 0;
+                virtual void Signal(const CommandData&, StringView rawXml) = 0;
+                virtual void Signal(const CheckAliveData&, StringView rawXml) = 0;
+                virtual void Disconnect() = 0;
 
-            virtual ~IStateMachine() = default;
-        };
+                virtual ~IStateMachine() = default;
+            };
 
-        struct IStateMachineCallback
-        {
-            virtual void OnSocketConnected(EState, const ConnectionInfo&) = 0;
-            virtual void On(EState, const ServiceDescriptionData&) = 0;
-            virtual void On(EState, const BoardAvailableData&) = 0;
-            virtual void On(EState, const RevokeBoardAvailableData&) = 0;
-            virtual void On(EState, const TransportFinishedData&) = 0;
-            virtual void On(EState, const BoardForecastData&) = 0;
-            virtual void On(EState, const SendBoardInfoData&) = 0;
-            virtual void On(EState, const NotificationData&) = 0;
-            virtual void On(EState, const CommandData&) = 0;
-            virtual void On(EState, const CheckAliveData&) = 0;
-            virtual void OnState(EState) = 0;
-            virtual void OnDisconnected(EState, const Error&) = 0;
+            struct IStateMachineCallback
+            {
+                virtual void OnSocketConnected(EState, const ConnectionInfo&) = 0;
+                virtual void On(EState, const ServiceDescriptionData&) = 0;
+                virtual void On(EState, const BoardAvailableData&) = 0;
+                virtual void On(EState, const RevokeBoardAvailableData&) = 0;
+                virtual void On(EState, const TransportFinishedData&) = 0;
+                virtual void On(EState, const BoardForecastData&) = 0;
+                virtual void On(EState, const SendBoardInfoData&) = 0;
+                virtual void On(EState, const NotificationData&) = 0;
+                virtual void On(EState, const CommandData&) = 0;
+                virtual void On(EState, const CheckAliveData&) = 0;
+                virtual void OnState(EState) = 0;
+                virtual void OnDisconnected(EState, const Error&) = 0;
 
-        protected:
-            ~IStateMachineCallback() = default;
-        };
+            protected:
+                ~IStateMachineCallback() = default;
+            };
 
-        std::unique_ptr<IStateMachine> CreateStateMachine(unsigned sessionId, IAsioService&, ISerializer&, ECheckState);
+            std::unique_ptr<IStateMachine> CreateStateMachine(unsigned sessionId, IAsioService&, ISerializer&, ECheckState);
+        }
+
     }
-
 }
 

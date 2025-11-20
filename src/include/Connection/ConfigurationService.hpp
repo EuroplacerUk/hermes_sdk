@@ -25,7 +25,7 @@ limitations under the License.
 
 namespace Hermes
 {
-    struct IConfigurationServiceCallback
+    struct IConfigurationServiceCallback : ITraceCallback
     {
         IConfigurationServiceCallback() = default;
 
@@ -37,8 +37,6 @@ namespace Hermes
         virtual Error OnSetConfiguration(unsigned sessionId, const ConnectionInfo&, const SetConfigurationData&) = 0;
         virtual CurrentConfigurationData OnGetConfiguration(unsigned sessionId, const ConnectionInfo&) = 0;
         virtual void OnDisconnected(unsigned sessionId, const Error&) = 0;
-
-        virtual void OnTrace(unsigned sessionId, ETraceType, StringView trace) = 0;
 
     protected:
         virtual ~IConfigurationServiceCallback() = default;

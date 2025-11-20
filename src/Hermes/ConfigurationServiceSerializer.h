@@ -26,31 +26,34 @@ namespace Hermes
     struct IAsioService;
     struct IServerSocket;
 
-    struct IConfigurationServiceSerializerCallback;
-
-    struct IConfigurationServiceSerializer
+    namespace Implementation
     {
-        virtual void Connect(std::weak_ptr<void> wpOwner, IConfigurationServiceSerializerCallback&) = 0;
-        virtual void Signal(const CurrentConfigurationData&) = 0;
-        virtual void Signal(const NotificationData&) = 0;
-        virtual void Disconnect(const NotificationData&) = 0;
+        struct IConfigurationServiceSerializerCallback;
 
-        virtual ~IConfigurationServiceSerializer() = default;
-    };
+        struct IConfigurationServiceSerializer
+        {
+            virtual void Connect(std::weak_ptr<void> wpOwner, IConfigurationServiceSerializerCallback&) = 0;
+            virtual void Signal(const CurrentConfigurationData&) = 0;
+            virtual void Signal(const NotificationData&) = 0;
+            virtual void Disconnect(const NotificationData&) = 0;
 
-    struct IConfigurationServiceSerializerCallback
-    {
-        virtual void OnSocketConnected(const ConnectionInfo&) = 0;
-        virtual void On(const GetConfigurationData&) = 0;
-        virtual void On(const SetConfigurationData&) = 0;
-        virtual void OnDisconnected(const Error&) = 0;
+            virtual ~IConfigurationServiceSerializer() = default;
+        };
 
-    protected:
-        ~IConfigurationServiceSerializerCallback() = default;
-    };
+        struct IConfigurationServiceSerializerCallback
+        {
+            virtual void OnSocketConnected(const ConnectionInfo&) = 0;
+            virtual void On(const GetConfigurationData&) = 0;
+            virtual void On(const SetConfigurationData&) = 0;
+            virtual void OnDisconnected(const Error&) = 0;
 
-    std::unique_ptr<IConfigurationServiceSerializer> CreateConfigurationServiceSerializer(unsigned sessionId,
-        IAsioService&, IServerSocket&);
+        protected:
+            ~IConfigurationServiceSerializerCallback() = default;
+        };
+
+        std::unique_ptr<IConfigurationServiceSerializer> CreateConfigurationServiceSerializer(unsigned sessionId,
+            IAsioService&, IServerSocket&);
+    }
 }
 
 

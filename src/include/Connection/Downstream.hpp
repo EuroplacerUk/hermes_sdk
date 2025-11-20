@@ -26,7 +26,7 @@ limitations under the License.
 namespace Hermes
 {
 
-    struct IDownstreamCallback
+    struct IDownstreamCallback : ITraceCallback
     {
         IDownstreamCallback() = default;
 
@@ -47,8 +47,6 @@ namespace Hermes
         virtual void On(unsigned sessionId, EState, const StartTransportData&) = 0;
         virtual void On(unsigned sessionId, EState, const StopTransportData&) = 0;
         virtual void On(unsigned /*sessionId*/, const QueryBoardInfoData&) {} // not necessarily interesting, hence not abstract
-
-        virtual void OnTrace(unsigned sessionId, ETraceType, StringView trace) = 0;
 
     protected:
         virtual ~IDownstreamCallback() = default;
@@ -119,4 +117,107 @@ namespace Hermes
         void OnDisconnected(unsigned sessionId, EState state, const Error& data) override { OnDownstreamDisconnected(sessionId, state, data); }
         void OnTrace(unsigned sessionId, ETraceType type, StringView data) override { OnDownstreamTrace(sessionId, type, data); }
     };
+
+#ifdef HERMES_CPP_ABI
+    HERMESPROTOCOL_API HermesDownstream* CreateHermesDownstream(uint32_t laneId, IDownstreamCallback& callback);
+#else
+    inline static HermesDownstream* CreateHermesDownstream(uint32_t laneId, IDownstreamCallback& callback)
+    {
+        HermesDownstreamCallbacks callbacks{};
+
+        callbacks.m_connectedCallback.m_pData = &callback;
+        callbacks.m_connectedCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
+            const HermesConnectionInfo* pConnectionInfo)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->OnConnected(sessionId, ToCpp(state),
+                    ToCpp(*pConnectionInfo));
+            };
+
+        callbacks.m_serviceDescriptionCallback.m_pData = &callback;
+        callbacks.m_serviceDescriptionCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
+            const HermesServiceDescriptionData* pServiceDescriptionData)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(state), ToCpp(*pServiceDescriptionData));
+            };
+
+        callbacks.m_machineReadyCallback.m_pData = &callback;
+        callbacks.m_machineReadyCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
+            const HermesMachineReadyData* pData)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(state), ToCpp(*pData));
+            };
+
+        callbacks.m_revokeMachineReadyCallback.m_pData = &callback;
+        callbacks.m_revokeMachineReadyCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
+            const HermesRevokeMachineReadyData* pData)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(state), ToCpp(*pData));
+            };
+
+        callbacks.m_startTransportCallback.m_pData = &callback;
+        callbacks.m_startTransportCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
+            const HermesStartTransportData* pData)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(state), ToCpp(*pData));
+            };
+
+        callbacks.m_stopTransportCallback.m_pData = &callback;
+        callbacks.m_stopTransportCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
+            const HermesStopTransportData* pData)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(state), ToCpp(*pData));
+            };
+
+        callbacks.m_queryBoardInfoCallback.m_pData = &callback;
+        callbacks.m_queryBoardInfoCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
+            const HermesQueryBoardInfoData* pData)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
+            };
+
+        callbacks.m_notificationCallback.m_pData = &callback;
+        callbacks.m_notificationCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
+            const HermesNotificationData* pData)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
+            };
+
+        callbacks.m_checkAliveCallback.m_pData = &callback;
+        callbacks.m_checkAliveCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
+            const HermesCheckAliveData* pData)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
+            };
+
+        callbacks.m_commandCallback.m_pData = &callback;
+        callbacks.m_commandCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
+            const HermesCommandData* pData)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
+            };
+
+        callbacks.m_stateCallback.m_pData = &callback;
+        callbacks.m_stateCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->OnState(sessionId, ToCpp(state));
+            };
+
+        callbacks.m_disconnectedCallback.m_pData = &callback;
+        callbacks.m_disconnectedCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
+            const HermesError* pError)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->OnDisconnected(sessionId, ToCpp(state), ToCpp(*pError));
+            };
+
+        callbacks.m_traceCallback.m_pData = &callback;
+        callbacks.m_traceCallback.m_pCall = [](void* pCallback, unsigned sessionId, EHermesTraceType type,
+            HermesStringView trace)
+            {
+                static_cast<IDownstreamCallback*>(pCallback)->OnTrace(sessionId, ToCpp(type), ToCpp(trace));
+            };
+
+        return ::CreateHermesDownstream(laneId, &callbacks);
+
+    }
+#endif
 }

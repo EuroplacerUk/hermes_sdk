@@ -25,7 +25,7 @@ limitations under the License.
 
 namespace Hermes
 {
-    struct IVerticalClientCallback
+    struct IVerticalClientCallback : ITraceCallback
     {
         IVerticalClientCallback() = default;
 
@@ -44,8 +44,6 @@ namespace Hermes
         virtual void On(unsigned sessionId, const NotificationData&) = 0;
         virtual void On(unsigned /*sessionId*/, const CheckAliveData&) {} // not necessarily interesting, hence not abstract
         virtual void OnDisconnected(unsigned sessionId, EVerticalState, const Error&) = 0;
-
-        virtual void OnTrace(unsigned sessionId, ETraceType, StringView trace) = 0;
 
     protected:
         virtual ~IVerticalClientCallback() = default;
@@ -84,5 +82,100 @@ namespace Hermes
         HermesVerticalClient* m_pImpl = nullptr;
     };
 
+#ifdef HERMES_CPP_ABI
+    HERMESPROTOCOL_API HermesVerticalClient* CreateHermesVerticalClient(IVerticalClientCallback& callback);
+#else
+    inline static HermesVerticalClient* CreateHermesVerticalClient(IVerticalClientCallback& callback)
+    {
+        HermesVerticalClientCallbacks callbacks{};
+
+        callbacks.m_connectedCallback.m_pData = &callback;
+        callbacks.m_connectedCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesVerticalState state,
+            const HermesConnectionInfo* pConnectionInfo)
+            {
+                static_cast<IVerticalClientCallback*>(pCallback)->OnConnected(sessionId, ToCpp(state),
+                    ToCpp(*pConnectionInfo));
+            };
+
+        callbacks.m_serviceDescriptionCallback.m_pData = &callback;
+        callbacks.m_serviceDescriptionCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesVerticalState state,
+            const HermesSupervisoryServiceDescriptionData* pServiceDescriptionData)
+            {
+                static_cast<IVerticalClientCallback*>(pCallback)->On(sessionId, ToCpp(state), ToCpp(*pServiceDescriptionData));
+            };
+
+        callbacks.m_boardArrivedCallback.m_pData = &callback;
+        callbacks.m_boardArrivedCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
+            const HermesBoardArrivedData* pData)
+            {
+                static_cast<IVerticalClientCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
+            };
+
+        callbacks.m_boardDepartedCallback.m_pData = &callback;
+        callbacks.m_boardDepartedCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
+            const HermesBoardDepartedData* pData)
+            {
+                static_cast<IVerticalClientCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
+            };
+
+        callbacks.m_queryWorkOrderInfoCallback.m_pData = &callback;
+        callbacks.m_queryWorkOrderInfoCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
+            const HermesQueryWorkOrderInfoData* pData)
+            {
+                static_cast<IVerticalClientCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
+            };
+
+        callbacks.m_replyWorkOrderInfoCallback.m_pData = &callback;
+        callbacks.m_replyWorkOrderInfoCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
+            const HermesReplyWorkOrderInfoData* pData)
+            {
+                static_cast<IVerticalClientCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
+            };
+
+        callbacks.m_currentConfigurationCallback.m_pData = &callback;
+        callbacks.m_currentConfigurationCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
+            const HermesCurrentConfigurationData* pData)
+            {
+                static_cast<IVerticalClientCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
+            };
+
+        callbacks.m_notificationCallback.m_pData = &callback;
+        callbacks.m_notificationCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
+            const HermesNotificationData* pData)
+            {
+                static_cast<IVerticalClientCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
+            };
+
+        callbacks.m_checkAliveCallback.m_pData = &callback;
+        callbacks.m_checkAliveCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
+            const HermesCheckAliveData* pData)
+            {
+                static_cast<IVerticalClientCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
+            };
+
+        callbacks.m_disconnectedCallback.m_pData = &callback;
+        callbacks.m_disconnectedCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesVerticalState state,
+            const HermesError* pError)
+            {
+                static_cast<IVerticalClientCallback*>(pCallback)->OnDisconnected(sessionId, ToCpp(state), ToCpp(*pError));
+            };
+
+        callbacks.m_traceCallback.m_pData = &callback;
+        callbacks.m_traceCallback.m_pCall = [](void* pCallback, unsigned sessionId, EHermesTraceType type,
+            HermesStringView trace)
+            {
+                static_cast<IVerticalClientCallback*>(pCallback)->OnTrace(sessionId, ToCpp(type), ToCpp(trace));
+            };
+
+        callbacks.m_sendHermesCapabilitiesCallback.m_pData = &callback;
+        callbacks.m_sendHermesCapabilitiesCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
+            const HermesSendHermesCapabilitiesData* pData)
+            {
+                static_cast<IVerticalClientCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
+            };
+
+        return ::CreateHermesVerticalClient(&callbacks);
+    }
+#endif
     
 }

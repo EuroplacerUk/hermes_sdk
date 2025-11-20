@@ -22,6 +22,43 @@ limitations under the License.
 
 namespace Hermes
 {
+    struct ITraceCallback
+    {
+        virtual void OnTrace(unsigned sessionId, ETraceType, StringView trace) = 0;
+
+    protected:
+        ~ITraceCallback() {}
+    };
+
+    template <typename InterfaceT, typename WrapperT, typename HermesT>
+    struct CallbackHolder
+    {
+        CallbackHolder(const HermesT& callbacks) :
+            m_adapter{ std::make_shared<WrapperT>(callbacks) },
+            m_callbacks{ *(WrapperT*)m_adapter.get() }
+        {
+        }
+
+        CallbackHolder(InterfaceT& callbacks) :
+            m_adapter{ nullptr },
+            m_callbacks{ callbacks }
+        {
+
+        }
+
+        InterfaceT* operator->()
+        {
+            return &m_callbacks;
+        }
+        InterfaceT& operator*()
+        {
+            return m_callbacks;
+        }
+    private:
+        std::shared_ptr<void> m_adapter;
+        InterfaceT& m_callbacks;
+    };
+
     // check whether we got the constants right:
     static_assert(cCONFIG_PORT == cHERMES_CONFIG_PORT, "");
     static_assert(cBASE_PORT == cHERMES_BASE_PORT, "");

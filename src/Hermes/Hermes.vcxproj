@@ -117,7 +117,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;BOOST_ASIO_NO_DEPRECATED;_DEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HERMES_LIB;HERMES_CPP_ABI;BOOST_SYSTEM_USE_UTF8;BOOST_ASIO_NO_DEPRECATED;_DEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)\..\..\References; $(ProjectDir)\..\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <AdditionalOptions>/Zc:threadSafeInit-</AdditionalOptions>
@@ -137,7 +137,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;BOOST_ASIO_NO_DEPRECATED;_DEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HERMES_LIB;HERMES_CPP_ABI;BOOST_SYSTEM_USE_UTF8;BOOST_ASIO_NO_DEPRECATED;_DEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)\..\..\References; $(ProjectDir)\..\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <AdditionalOptions>/Zc:threadSafeInit-</AdditionalOptions>
@@ -156,7 +156,7 @@
       <WarningLevel>Level4</WarningLevel>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <Optimization>MaxSpeed</Optimization>
-      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;BOOST_ASIO_NO_DEPRECATED;NDEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HERMES_LIB;HERMES_CPP_ABI;BOOST_SYSTEM_USE_UTF8;BOOST_ASIO_NO_DEPRECATED;NDEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)\..\..\References; $(ProjectDir)\..\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <AdditionalOptions>/Zc:threadSafeInit-</AdditionalOptions>
@@ -179,7 +179,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>HERMES_LIB;BOOST_SYSTEM_USE_UTF8;BOOST_ASIO_NO_DEPRECATED;NDEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>HERMES_LIB;HERMES_CPP_ABI;BOOST_SYSTEM_USE_UTF8;BOOST_ASIO_NO_DEPRECATED;NDEBUG;_WINDOWS;_USRDLL;HERMES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)\..\..\References; $(ProjectDir)\..\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <AdditionalOptions>/Zc:threadSafeInit-</AdditionalOptions>

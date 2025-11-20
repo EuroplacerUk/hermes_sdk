@@ -29,6 +29,8 @@ limitations under the License.
 #include <mutex>
 #include <vector>
 
+#include <Connection/ConfigurationService.hpp>
+
 namespace
 {
     template<class CallbackT>
@@ -52,6 +54,7 @@ namespace
 }
 
 using namespace Hermes;
+using namespace Hermes::Implementation;
 
 struct HermesConfigurationService : IAcceptorCallback, IConfigurationServiceSessionCallback
 {

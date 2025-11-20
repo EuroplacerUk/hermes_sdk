@@ -29,36 +29,15 @@ limitations under the License.
 #include <memory>
 #include <vector>
 
+#include <Connection/Downstream.hpp>
+
 using namespace Hermes;
-using namespace Hermes::Downstream;
+using namespace Hermes::Implementation::Downstream;
 
-struct HermesDownstream : IAcceptorCallback, ISessionCallback
+struct DownstreamCallbackAdapter : IDownstreamCallback
 {
-    unsigned m_laneId = 0U;
-    Service m_service;
-    DownstreamSettings m_settings;
-
-    std::unique_ptr<Session> m_upSession;
-    std::unique_ptr<IAcceptor>  m_upAcceptor{CreateAcceptor(m_service, *this)};
-
-    ApiCallback<HermesConnectedCallback> m_connectedCallback;
-    ApiCallback<HermesServiceDescriptionCallback> m_serviceDescriptionCallback;
-    ApiCallback<HermesMachineReadyCallback> m_machineReadyCallback;
-    ApiCallback<HermesRevokeMachineReadyCallback> m_revokeMachineReadyCallback;
-    ApiCallback<HermesStartTransportCallback> m_startTransportCallback;
-    ApiCallback<HermesStopTransportCallback> m_stopTransportCallback;
-    ApiCallback<HermesQueryBoardInfoCallback> m_queryBoardInfoCallback;
-    ApiCallback<HermesNotificationCallback> m_notificationCallback;
-    ApiCallback<HermesCommandCallback> m_commandCallback;
-    ApiCallback<HermesStateCallback> m_stateCallback;
-    ApiCallback<HermesCheckAliveCallback> m_checkAliveCallback;
-    ApiCallback<HermesDisconnectedCallback> m_disconnectedCallback;
-
-    bool m_enabled{false};
-
-    HermesDownstream(unsigned laneId, const HermesDownstreamCallbacks& callbacks) :
-        m_laneId(laneId),
-        m_service(callbacks.m_traceCallback),
+    DownstreamCallbackAdapter(const HermesDownstreamCallbacks& callbacks) :
+        m_traceCallback(callbacks.m_traceCallback),
         m_connectedCallback(callbacks.m_connectedCallback),
         m_serviceDescriptionCallback(callbacks.m_serviceDescriptionCallback),
         m_machineReadyCallback(callbacks.m_machineReadyCallback),
@@ -72,8 +51,124 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         m_checkAliveCallback(callbacks.m_checkAliveCallback),
         m_disconnectedCallback(callbacks.m_disconnectedCallback)
     {
+
+    }
+
+    void OnConnected(unsigned sessionId, EState state, const ConnectionInfo& in_data) override {
+        const Converter2C<ConnectionInfo> converter(in_data);
+        m_connectedCallback(sessionId, ToC(state), converter.CPointer());
+    };
+
+    void On(unsigned sessionId, const NotificationData& in_data) override
+    {
+        const Converter2C<NotificationData> converter(in_data);
+        m_notificationCallback(sessionId, converter.CPointer());
+    }
+    void On(unsigned sessionId, const CheckAliveData& in_data) override
+    {
+        const Converter2C<CheckAliveData> converter(in_data);
+        m_checkAliveCallback(sessionId, converter.CPointer());
+    }
+    void On(unsigned sessionId, const CommandData& in_data) override
+    {
+        const Converter2C<CommandData> converter(in_data);
+        m_commandCallback(sessionId, converter.CPointer());
+    }
+    void OnState(unsigned sessionId, EState state)
+    {
+        m_stateCallback(sessionId, ToC(state));
+    }
+    void OnDisconnected(unsigned sessionId, EState state, const Error& in_data)
+    {
+        const Converter2C<Error> converter(in_data);
+        m_disconnectedCallback(sessionId, ToC(state), converter.CPointer());
+    }
+
+    void On(unsigned sessionId, EState state, const ServiceDescriptionData& in_data) override
+    {
+        const Converter2C<ServiceDescriptionData> converter(in_data);
+        m_serviceDescriptionCallback(sessionId, ToC(state), converter.CPointer());
+    }
+
+    void On(unsigned sessionId, EState state, const MachineReadyData& in_data) override
+    {
+        const Converter2C<MachineReadyData> converter(in_data);
+        m_machineReadyCallback(sessionId, ToC(state), converter.CPointer());
+    }
+    void On(unsigned sessionId, EState state, const RevokeMachineReadyData& in_data) override
+    {
+        const Converter2C<RevokeMachineReadyData> converter(in_data);
+        m_revokeMachineReadyCallback(sessionId, ToC(state), converter.CPointer());
+    }
+    void On(unsigned sessionId, EState state, const StartTransportData& in_data) override
+    {
+        const Converter2C<StartTransportData> converter(in_data);
+        m_startTransportCallback(sessionId, ToC(state), converter.CPointer());
+    }
+    void On(unsigned sessionId, EState state, const StopTransportData& in_data) override
+    {
+        const Converter2C<StopTransportData> converter(in_data);
+        m_stopTransportCallback(sessionId, ToC(state), converter.CPointer());
+    }
+    void On(unsigned sessionId, const QueryBoardInfoData& in_data) override
+    {
+        const Converter2C<QueryBoardInfoData> converter(in_data);
+        m_queryBoardInfoCallback(sessionId, converter.CPointer());
+    }
+
+    void OnTrace(unsigned sessionId, ETraceType traceType, StringView trace) override
+    {
+        m_traceCallback(sessionId, ToC(traceType), ToC(trace));
+    }
+
+private:
+    ApiCallback<HermesTraceCallback> m_traceCallback;
+    ApiCallback<HermesConnectedCallback> m_connectedCallback;
+    ApiCallback<HermesServiceDescriptionCallback> m_serviceDescriptionCallback;
+    ApiCallback<HermesMachineReadyCallback> m_machineReadyCallback;
+    ApiCallback<HermesRevokeMachineReadyCallback> m_revokeMachineReadyCallback;
+    ApiCallback<HermesStartTransportCallback> m_startTransportCallback;
+    ApiCallback<HermesStopTransportCallback> m_stopTransportCallback;
+    ApiCallback<HermesQueryBoardInfoCallback> m_queryBoardInfoCallback;
+    ApiCallback<HermesNotificationCallback> m_notificationCallback;
+    ApiCallback<HermesCommandCallback> m_commandCallback;
+    ApiCallback<HermesStateCallback> m_stateCallback;
+    ApiCallback<HermesCheckAliveCallback> m_checkAliveCallback;
+    ApiCallback<HermesDisconnectedCallback> m_disconnectedCallback;
+};
+
+struct DownstreamCallbackHolder : CallbackHolder<IDownstreamCallback, DownstreamCallbackAdapter, HermesDownstreamCallbacks>
+{
+    DownstreamCallbackHolder(const HermesDownstreamCallbacks& callbacks) : CallbackHolder(callbacks)
+    {
+    }
+
+    DownstreamCallbackHolder(IDownstreamCallback& callbacks) : CallbackHolder(callbacks)
+    {
+    }
+};
+
+struct HermesDownstream : IAcceptorCallback, ISessionCallback
+{
+    unsigned m_laneId = 0U;
+    Service m_service;
+    DownstreamSettings m_settings;
+
+    std::unique_ptr<Session> m_upSession;
+    std::unique_ptr<IAcceptor>  m_upAcceptor{CreateAcceptor(m_service, *this)};
+
+    DownstreamCallbackHolder m_callbacks;
+
+    bool m_enabled{false};
+
+    HermesDownstream(unsigned laneId, DownstreamCallbackHolder&& callbacks) :
+        m_laneId(laneId),
+        m_service(*callbacks),
+        m_callbacks{ callbacks }
+    {
         m_service.Inform(0U, "Created");
     }
+
 
     virtual ~HermesDownstream()
     {
@@ -173,8 +268,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<ConnectionInfo> converter(in_data);
-        m_connectedCallback(sessionId, ToC(state), converter.CPointer());
+        m_callbacks->OnConnected(sessionId, state, in_data);
     }
 
     void On(unsigned sessionId, EState state, const ServiceDescriptionData& in_data) override
@@ -183,8 +277,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<ServiceDescriptionData> converter(in_data);
-        m_serviceDescriptionCallback(sessionId, ToC(state), converter.CPointer());
+        m_callbacks->On(sessionId, state, in_data);
     }
 
     void On(unsigned sessionId, EState state, const MachineReadyData& in_data) override
@@ -193,8 +286,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<MachineReadyData> converter(in_data);
-        m_machineReadyCallback(sessionId, ToC(state), converter.CPointer());
+        m_callbacks->On(sessionId, state, in_data);
     }
 
     void On(unsigned sessionId, EState state, const RevokeMachineReadyData& in_data) override
@@ -203,8 +295,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<RevokeMachineReadyData> converter(in_data);
-        m_revokeMachineReadyCallback(sessionId, ToC(state), converter.CPointer());
+        m_callbacks->On(sessionId, state, in_data);
     }
 
     void On(unsigned sessionId, EState state, const StartTransportData& in_data) override
@@ -213,8 +304,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<StartTransportData> converter(in_data);
-        m_startTransportCallback(sessionId, ToC(state), converter.CPointer());
+        m_callbacks->On(sessionId, state, in_data);
     }
 
     void On(unsigned sessionId, EState state, const StopTransportData& in_data) override
@@ -223,8 +313,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<StopTransportData> converter(in_data);
-        m_stopTransportCallback(sessionId, ToC(state), converter.CPointer());
+        m_callbacks->On(sessionId, state, in_data);
     }
 
     void On(unsigned sessionId, EState, const QueryBoardInfoData& in_data) override
@@ -233,8 +322,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<QueryBoardInfoData> converter(in_data);
-        m_queryBoardInfoCallback(sessionId, converter.CPointer());
+        m_callbacks->On(sessionId, in_data);
     }
 
     void On(unsigned sessionId, EState, const NotificationData& in_data) override
@@ -243,8 +331,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<NotificationData> converter(in_data);
-        m_notificationCallback(sessionId, converter.CPointer());
+        m_callbacks->On(sessionId, in_data);
     }
 
     void On(unsigned sessionId, EState, const CommandData& in_data) override
@@ -253,8 +340,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         if (!pSession)
             return;
 
-        const Converter2C<CommandData> converter(in_data);
-        m_commandCallback(sessionId, converter.CPointer());
+        m_callbacks->On(sessionId, in_data);
     }
 
     void On(unsigned sessionId, EState, const CheckAliveData& in_data) override
@@ -271,8 +357,8 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
             data.m_optionalType = ECheckAliveType::ePONG;
             m_service.Post([this, sessionId, data = std::move(data)]() { Signal(sessionId, data, Serialize(data)); });
         }
-        const Converter2C<CheckAliveData> converter(in_data);
-        m_checkAliveCallback(sessionId, converter.CPointer());
+
+        m_callbacks->On(sessionId, in_data);
     }
 
     void OnState(unsigned sessionId, EState state) override
@@ -281,7 +367,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         if (!pSession)
             return;
 
-        m_stateCallback(sessionId, ToC(state));
+        m_callbacks->OnState(sessionId, state);
     }
 
     void OnDisconnected(unsigned sessionId, EState, const Error& error) override
@@ -291,8 +377,8 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
             return;
         
         m_upSession.reset();
-        const Converter2C<Error> converter(error);
-        m_disconnectedCallback(sessionId, eHERMES_STATE_DISCONNECTED, converter.CPointer());
+
+        m_callbacks->OnDisconnected(sessionId, EState::eDISCONNECTED, error);
     }
 
     void Reset(const NotificationData& data)
@@ -326,8 +412,8 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         m_service.Log(sessionId, "RemoveCurrentSession_()");
         m_upSession->Disconnect();
         const Error error;
-        const Converter2C<Error> converter(error);
-        m_disconnectedCallback(sessionId, eHERMES_STATE_DISCONNECTED, converter.CPointer());
+
+        m_callbacks->OnDisconnected(sessionId, EState::eDISCONNECTED, error);
         m_upSession.reset();
     }
 
@@ -343,9 +429,18 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
 };
 
 //===================== implementation of public C functions ====================
+#ifdef HERMES_CPP_ABI
+HermesDownstream* Hermes::CreateHermesDownstream(uint32_t laneId, IDownstreamCallback& callback)
+{
+    return new HermesDownstream(laneId, DownstreamCallbackHolder{ callback });
+}
+#else
+#error "HERMES_CPP_ABI should always be defined for building Hermes library"
+#endif
+
 HermesDownstream* CreateHermesDownstream(uint32_t laneId, const HermesDownstreamCallbacks* pCallbacks)
 {
-    return new HermesDownstream(laneId, *pCallbacks);
+    return new HermesDownstream(laneId, DownstreamCallbackHolder{ *pCallbacks });
 }
 
 void RunHermesDownstream(HermesDownstream* pDownstream)
