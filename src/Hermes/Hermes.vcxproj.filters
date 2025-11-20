@@ -35,6 +35,9 @@
     <Filter Include="VerticalClient">
       <UniqueIdentifier>{3a3fc53b-b1ec-4d42-9082-17db5afd9423}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Public\Connection">
+      <UniqueIdentifier>{06b147bc-3489-4341-b45a-52ccbec631e7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -151,6 +154,45 @@
     <ClInclude Include="..\include\HermesVersion.h">
       <Filter>Public</Filter>
     </ClInclude>
+    <ClInclude Include="HermesChrono.hpp">
+      <Filter>Service</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Connection\Downstream.hpp">
+      <Filter>Public\Connection</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Connection\Upstream.hpp">
+      <Filter>Public\Connection</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Connection\ConfigurationService.hpp">
+      <Filter>Public\Connection</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Connection\ConfigurationClient.hpp">
+      <Filter>Public\Connection</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Connection\VerticalClient.hpp">
+      <Filter>Public\Connection</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Connection\VerticalService.hpp">
+      <Filter>Public\Connection</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Connection\ConfigurationClient.impl.hpp">
+      <Filter>Public\Connection</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Connection\ConfigurationService.impl.hpp">
+      <Filter>Public\Connection</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Connection\Downstream.impl.hpp">
+      <Filter>Public\Connection</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Connection\Upstream.impl.hpp">
+      <Filter>Public\Connection</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Connection\VerticalClient.impl.hpp">
+      <Filter>Public\Connection</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Connection\VerticalService.impl.hpp">
+      <Filter>Public\Connection</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -238,5 +280,8 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\..\COPYRIGHT.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Midl Include="forcemd.idl" />
   </ItemGroup>
 </Project>

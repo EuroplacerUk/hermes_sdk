@@ -197,6 +197,18 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\..\version\resource.h" />
+    <ClInclude Include="..\include\Connection\ConfigurationClient.hpp" />
+    <ClInclude Include="..\include\Connection\ConfigurationClient.impl.hpp" />
+    <ClInclude Include="..\include\Connection\ConfigurationService.hpp" />
+    <ClInclude Include="..\include\Connection\ConfigurationService.impl.hpp" />
+    <ClInclude Include="..\include\Connection\Downstream.hpp" />
+    <ClInclude Include="..\include\Connection\Downstream.impl.hpp" />
+    <ClInclude Include="..\include\Connection\Upstream.hpp" />
+    <ClInclude Include="..\include\Connection\Upstream.impl.hpp" />
+    <ClInclude Include="..\include\Connection\VerticalClient.hpp" />
+    <ClInclude Include="..\include\Connection\VerticalClient.impl.hpp" />
+    <ClInclude Include="..\include\Connection\VerticalService.hpp" />
+    <ClInclude Include="..\include\Connection\VerticalService.impl.hpp" />
     <ClInclude Include="..\include\HermesData.h" />
     <ClInclude Include="..\include\HermesSerialization.h" />
     <ClInclude Include="..\include\HermesDataConversion.hpp" />
