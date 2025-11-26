@@ -54,66 +54,33 @@ struct DownstreamCallbackAdapter : IDownstreamCallback
 
     }
 
-    void OnConnected(unsigned sessionId, EState state, const ConnectionInfo& in_data) override {
-        const Converter2C<ConnectionInfo> converter(in_data);
-        m_connectedCallback(sessionId, ToC(state), converter.CPointer());
-    };
+    template<typename HermesT, typename DataT> void OnCallback(ApiCallback<HermesT>& callback, unsigned sessionId, EState state, const DataT& in_data)
+    {
+        const Converter2C<DataT> converter(in_data);
+        callback(sessionId, ToC(state), converter.CPointer());
+    }
+    template<typename HermesT, typename DataT> void OnCallback(ApiCallback<HermesT>& callback, unsigned sessionId, const DataT& in_data)
+    {
+        const Converter2C<DataT> converter(in_data);
+        callback(sessionId, converter.CPointer());
+    }
 
-    void On(unsigned sessionId, const NotificationData& in_data) override
-    {
-        const Converter2C<NotificationData> converter(in_data);
-        m_notificationCallback(sessionId, converter.CPointer());
-    }
-    void On(unsigned sessionId, const CheckAliveData& in_data) override
-    {
-        const Converter2C<CheckAliveData> converter(in_data);
-        m_checkAliveCallback(sessionId, converter.CPointer());
-    }
-    void On(unsigned sessionId, const CommandData& in_data) override
-    {
-        const Converter2C<CommandData> converter(in_data);
-        m_commandCallback(sessionId, converter.CPointer());
-    }
+    void OnConnected(unsigned sessionId, EState state, const ConnectionInfo& in_data) override { OnCallback(m_connectedCallback, sessionId, state, in_data); }
+    void OnDisconnected(unsigned sessionId, EState state, const Error& in_data) override { OnCallback(m_disconnectedCallback, sessionId, state, in_data); }
+
+    void On(unsigned sessionId, const NotificationData& in_data) override { OnCallback(m_notificationCallback, sessionId, in_data); }
+    void On(unsigned sessionId, const CheckAliveData& in_data) override { OnCallback(m_checkAliveCallback, sessionId, in_data); }
+    void On(unsigned sessionId, const CommandData& in_data) override { OnCallback(m_commandCallback, sessionId, in_data); }
+    void On(unsigned sessionId, EState state, const ServiceDescriptionData& in_data) override { OnCallback(m_serviceDescriptionCallback, sessionId, state, in_data); }
+    void On(unsigned sessionId, EState state, const MachineReadyData& in_data) override { OnCallback(m_machineReadyCallback, sessionId, state, in_data); }
+    void On(unsigned sessionId, EState state, const RevokeMachineReadyData& in_data) override { OnCallback(m_revokeMachineReadyCallback, sessionId, state, in_data); }
+    void On(unsigned sessionId, EState state, const StartTransportData& in_data) override { OnCallback(m_startTransportCallback, sessionId, state, in_data); }
+    void On(unsigned sessionId, EState state, const StopTransportData& in_data) override { OnCallback(m_stopTransportCallback, sessionId, state, in_data); }
+    void On(unsigned sessionId, const QueryBoardInfoData& in_data) override { OnCallback(m_queryBoardInfoCallback, sessionId, in_data); }
+
     void OnState(unsigned sessionId, EState state)
     {
         m_stateCallback(sessionId, ToC(state));
-    }
-    void OnDisconnected(unsigned sessionId, EState state, const Error& in_data)
-    {
-        const Converter2C<Error> converter(in_data);
-        m_disconnectedCallback(sessionId, ToC(state), converter.CPointer());
-    }
-
-    void On(unsigned sessionId, EState state, const ServiceDescriptionData& in_data) override
-    {
-        const Converter2C<ServiceDescriptionData> converter(in_data);
-        m_serviceDescriptionCallback(sessionId, ToC(state), converter.CPointer());
-    }
-
-    void On(unsigned sessionId, EState state, const MachineReadyData& in_data) override
-    {
-        const Converter2C<MachineReadyData> converter(in_data);
-        m_machineReadyCallback(sessionId, ToC(state), converter.CPointer());
-    }
-    void On(unsigned sessionId, EState state, const RevokeMachineReadyData& in_data) override
-    {
-        const Converter2C<RevokeMachineReadyData> converter(in_data);
-        m_revokeMachineReadyCallback(sessionId, ToC(state), converter.CPointer());
-    }
-    void On(unsigned sessionId, EState state, const StartTransportData& in_data) override
-    {
-        const Converter2C<StartTransportData> converter(in_data);
-        m_startTransportCallback(sessionId, ToC(state), converter.CPointer());
-    }
-    void On(unsigned sessionId, EState state, const StopTransportData& in_data) override
-    {
-        const Converter2C<StopTransportData> converter(in_data);
-        m_stopTransportCallback(sessionId, ToC(state), converter.CPointer());
-    }
-    void On(unsigned sessionId, const QueryBoardInfoData& in_data) override
-    {
-        const Converter2C<QueryBoardInfoData> converter(in_data);
-        m_queryBoardInfoCallback(sessionId, converter.CPointer());
     }
 
     void OnTrace(unsigned sessionId, ETraceType traceType, StringView trace) override

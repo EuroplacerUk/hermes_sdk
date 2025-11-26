@@ -168,7 +168,7 @@ namespace Hermes
 
     typedef std::unique_ptr<IDownstream> DownstreamPtr;
 
-    DownstreamPtr MakeDownstream(uint32_t laneId, IDownstreamCallback& callback) {
+    DownstreamPtr CreateHermesDownstream(uint32_t laneId, IDownstreamCallback& callback) {
         return std::make_unique<Downstream>(laneId, callback);
     }
 
