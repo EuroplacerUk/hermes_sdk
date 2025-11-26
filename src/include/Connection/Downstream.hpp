@@ -52,41 +52,6 @@ namespace Hermes
         virtual ~IDownstreamCallback() = default;
     };
 
-    //======================= Downstream interface =====================================
-    class Downstream
-    {
-    public:
-        explicit Downstream(unsigned laneId, IDownstreamCallback&);
-        Downstream(const Downstream&) = delete;
-        Downstream& operator=(const Downstream&) = delete;
-        ~Downstream() { ::DeleteHermesDownstream(m_pImpl); }
-
-        void Run();
-        template<class F> void Post(F&&);
-        void Enable(const DownstreamSettings&);
-
-        void Signal(unsigned sessionId, const ServiceDescriptionData&);
-        void Signal(unsigned sessionId, const BoardAvailableData&);
-        void Signal(unsigned sessionId, const RevokeBoardAvailableData&);
-        void Signal(unsigned sessionId, const TransportFinishedData&);
-        void Signal(unsigned sessionId, const BoardForecastData&);
-        void Signal(unsigned sessionId, const SendBoardInfoData&);
-        void Signal(unsigned sessionId, const NotificationData&);
-        void Signal(unsigned sessionId, const CheckAliveData&);
-        void Signal(unsigned sessionId, const CommandData&);
-        void Reset(const NotificationData&);
-
-        // raw XML for testing
-        void Signal(unsigned sessionId, StringView rawXml);
-        void Reset(StringView rawXml);
-
-        void Disable(const NotificationData&);
-        void Stop();
-
-    private:
-        HermesDownstream* m_pImpl = nullptr;
-    };
-
     // Convenience interface for situations in which the same class implements IUpstreamCallback and IDownstreamCallback.
     // Because some function names clash, this adds a level of indirection to different function names, eg.
     // On(unsigned, const ServiceDescriptionData&)
@@ -118,106 +83,95 @@ namespace Hermes
         void OnTrace(unsigned sessionId, ETraceType type, StringView data) override { OnDownstreamTrace(sessionId, type, data); }
     };
 
-#ifdef HERMES_CPP_ABI
-    HERMESPROTOCOL_API HermesDownstream* CreateHermesDownstream(uint32_t laneId, IDownstreamCallback& callback);
-#else
-    inline static HermesDownstream* CreateHermesDownstream(uint32_t laneId, IDownstreamCallback& callback)
+    //======================= Downstream interface =====================================
+    struct IDownstream
     {
-        HermesDownstreamCallbacks callbacks{};
+        virtual void Run() = 0;
+        virtual void Enable(const DownstreamSettings&) = 0;
 
-        callbacks.m_connectedCallback.m_pData = &callback;
-        callbacks.m_connectedCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
-            const HermesConnectionInfo* pConnectionInfo)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->OnConnected(sessionId, ToCpp(state),
-                    ToCpp(*pConnectionInfo));
-            };
+        virtual void Signal(unsigned sessionId, const ServiceDescriptionData&) = 0;
+        virtual void Signal(unsigned sessionId, const BoardAvailableData&) = 0;
+        virtual void Signal(unsigned sessionId, const RevokeBoardAvailableData&) = 0;
+        virtual void Signal(unsigned sessionId, const TransportFinishedData&) = 0;
+        virtual void Signal(unsigned sessionId, const BoardForecastData&) = 0;
+        virtual void Signal(unsigned sessionId, const SendBoardInfoData&) = 0;
+        virtual void Signal(unsigned sessionId, const NotificationData&) = 0;
+        virtual void Signal(unsigned sessionId, const CheckAliveData&) = 0;
+        virtual void Signal(unsigned sessionId, const CommandData&) = 0;
+        virtual void Reset(const NotificationData&) = 0;
 
-        callbacks.m_serviceDescriptionCallback.m_pData = &callback;
-        callbacks.m_serviceDescriptionCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
-            const HermesServiceDescriptionData* pServiceDescriptionData)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(state), ToCpp(*pServiceDescriptionData));
-            };
+        // raw XML for testing
+        virtual void Signal(unsigned sessionId, StringView rawXml) = 0;
+        virtual void Reset(StringView rawXml) = 0;
 
-        callbacks.m_machineReadyCallback.m_pData = &callback;
-        callbacks.m_machineReadyCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
-            const HermesMachineReadyData* pData)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(state), ToCpp(*pData));
-            };
+        virtual void Disable(const NotificationData&) = 0;
+        virtual void Stop() = 0;
+        virtual void Delete() = 0;
 
-        callbacks.m_revokeMachineReadyCallback.m_pData = &callback;
-        callbacks.m_revokeMachineReadyCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
-            const HermesRevokeMachineReadyData* pData)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(state), ToCpp(*pData));
-            };
+        virtual void Post(std::function<void()>&&) = 0;
 
-        callbacks.m_startTransportCallback.m_pData = &callback;
-        callbacks.m_startTransportCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
-            const HermesStartTransportData* pData)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(state), ToCpp(*pData));
-            };
+        template<class F> void Post(F&& func) { Post(std::function<void()>{func}); }
 
-        callbacks.m_stopTransportCallback.m_pData = &callback;
-        callbacks.m_stopTransportCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
-            const HermesStopTransportData* pData)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(state), ToCpp(*pData));
-            };
+        virtual ~IDownstream() {}
+    };
 
-        callbacks.m_queryBoardInfoCallback.m_pData = &callback;
-        callbacks.m_queryBoardInfoCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
-            const HermesQueryBoardInfoData* pData)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
-            };
 
-        callbacks.m_notificationCallback.m_pData = &callback;
-        callbacks.m_notificationCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
-            const HermesNotificationData* pData)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
-            };
 
-        callbacks.m_checkAliveCallback.m_pData = &callback;
-        callbacks.m_checkAliveCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
-            const HermesCheckAliveData* pData)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
-            };
+#ifdef HERMES_CPP_ABI
+    struct DownstreamDeleter {
+        void operator()(IDownstream* ptr) { ptr->Delete(); }
+    };
 
-        callbacks.m_commandCallback.m_pData = &callback;
-        callbacks.m_commandCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
-            const HermesCommandData* pData)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
-            };
+    template<typename T>
+    using DownstreamPtrT = std::unique_ptr<T, DownstreamDeleter>;
 
-        callbacks.m_stateCallback.m_pData = &callback;
-        callbacks.m_stateCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->OnState(sessionId, ToCpp(state));
-            };
+    typedef DownstreamPtrT<IDownstream> DownstreamPtr;
 
-        callbacks.m_disconnectedCallback.m_pData = &callback;
-        callbacks.m_disconnectedCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesState state,
-            const HermesError* pError)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->OnDisconnected(sessionId, ToCpp(state), ToCpp(*pError));
-            };
+    HERMESPROTOCOL_API DownstreamPtr CreateHermesDownstream(uint32_t laneId, IDownstreamCallback& callback);
+#else
+    class Downstream : public IDownstream
+    {
+    public:
+        explicit Downstream(unsigned laneId, IDownstreamCallback&);
+        Downstream(const Downstream&) = delete;
+        Downstream& operator=(const Downstream&) = delete;
+        ~Downstream() { Delete(); }
 
-        callbacks.m_traceCallback.m_pData = &callback;
-        callbacks.m_traceCallback.m_pCall = [](void* pCallback, unsigned sessionId, EHermesTraceType type,
-            HermesStringView trace)
-            {
-                static_cast<IDownstreamCallback*>(pCallback)->OnTrace(sessionId, ToCpp(type), ToCpp(trace));
-            };
+        void Run();
+        template<class F> void Post(F&&);
+        void Enable(const DownstreamSettings&);
 
-        return ::CreateHermesDownstream(laneId, &callbacks);
+        void Signal(unsigned sessionId, const ServiceDescriptionData&);
+        void Signal(unsigned sessionId, const BoardAvailableData&);
+        void Signal(unsigned sessionId, const RevokeBoardAvailableData&);
+        void Signal(unsigned sessionId, const TransportFinishedData&);
+        void Signal(unsigned sessionId, const BoardForecastData&);
+        void Signal(unsigned sessionId, const SendBoardInfoData&);
+        void Signal(unsigned sessionId, const NotificationData&);
+        void Signal(unsigned sessionId, const CheckAliveData&);
+        void Signal(unsigned sessionId, const CommandData&);
+        void Reset(const NotificationData&);
 
+        // raw XML for testing
+        void Signal(unsigned sessionId, StringView rawXml);
+        void Reset(StringView rawXml);
+
+        void Disable(const NotificationData&);
+        void Stop();
+        void Delete() override { ::DeleteHermesDownstream(m_pImpl); m_pImpl = nullptr; }
+
+        void Post(std::function<void()>&&) override {}
+
+    private:
+        HermesDownstream* m_pImpl = nullptr;
+    };
+
+    typedef std::unique_ptr<IDownstream> DownstreamPtr;
+
+    DownstreamPtr MakeDownstream(uint32_t laneId, IDownstreamCallback& callback) {
+        return std::make_unique<Downstream>(laneId, callback);
     }
+
+
 #endif
 }

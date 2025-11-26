@@ -148,19 +148,8 @@ struct DownstreamCallbackHolder : CallbackHolder<IDownstreamCallback, Downstream
     }
 };
 
-struct HermesDownstream : IAcceptorCallback, ISessionCallback
+struct HermesDownstream : IDownstream, IAcceptorCallback, ISessionCallback
 {
-    unsigned m_laneId = 0U;
-    Service m_service;
-    DownstreamSettings m_settings;
-
-    std::unique_ptr<Session> m_upSession;
-    std::unique_ptr<IAcceptor>  m_upAcceptor{CreateAcceptor(m_service, *this)};
-
-    DownstreamCallbackHolder m_callbacks;
-
-    bool m_enabled{false};
-
     HermesDownstream(unsigned laneId, DownstreamCallbackHolder&& callbacks) :
         m_laneId(laneId),
         m_service(*callbacks),
@@ -175,8 +164,127 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         m_service.Inform(0U, "Deleted");
     }
 
+    void Run() override
+    {
+        m_service.Log(0U, "RunHermesDownstream");
+        m_service.Run();
+    }
+    void Enable(const DownstreamSettings& in_settings) override
+    {
+        m_service.Log(0U, "EnableHermesDownstream");
+
+        auto settings = in_settings;
+        if (!settings.m_port)
+        {
+            settings.m_port = static_cast<uint16_t>(cBASE_PORT + m_laneId);
+        }
+        m_service.Post([this, settings = std::move(settings)]()
+        {
+            this->Enable(settings);
+        });
+    }
+
+    void Signal(unsigned sessionId, const ServiceDescriptionData& in_data) override { DoSignal("SignalHermesDownstreamServiceDescription", sessionId, in_data); }
+    void Signal(unsigned sessionId, const BoardAvailableData& in_data) override { DoSignal("SignalHermesBoardAvailable", sessionId, in_data); }
+    void Signal(unsigned sessionId, const RevokeBoardAvailableData& in_data) override { DoSignal("SignalHermesRevokeBoardAvailable", sessionId, in_data); }
+    void Signal(unsigned sessionId, const TransportFinishedData& in_data) override { DoSignal("SignalHermesTransportFinished", sessionId, in_data); }
+    void Signal(unsigned sessionId, const BoardForecastData& in_data) override { DoSignal("SignalHermesBoardForecast", sessionId, in_data); }
+    void Signal(unsigned sessionId, const SendBoardInfoData& in_data) override { DoSignal("SignalHermesSendBoardInfo", sessionId, in_data); }
+    void Signal(unsigned sessionId, const NotificationData& in_data) override { DoSignal("SignalHermesDownstreamNotification", sessionId, in_data); }
+    void Signal(unsigned sessionId, const CheckAliveData& in_data) override { DoSignal("SignalHermesDownstreamCheckAlive", sessionId, in_data); }
+    void Signal(unsigned sessionId, const CommandData& in_data) override { DoSignal("SignalHermesDownstreamCommand", sessionId, in_data); }
+
+    void Reset(const NotificationData& in_data) override
+    {
+        m_service.Log(0U, "ResetHermesDownstream");
+        m_service.Post([this, data = in_data]()
+        {
+            this->DoReset(data);
+        });
+    }
+
+    // raw XML for testing
+    void Signal(unsigned sessionId, StringView rawXml) override
+    {
+        m_service.Log(sessionId, "SignalHermesDownstreamRawXml");
+        m_service.Post([this, sessionId, xmlData = std::string{ rawXml }]() mutable
+        {
+            MessageDispatcher dispatcher{ sessionId, m_service };
+            auto parseData = xmlData;
+
+            bool wasDispatched = false;
+            dispatcher.Add<ServiceDescriptionData>([&](const auto& data) { wasDispatched = true; DoSignal(sessionId, data, xmlData); });
+            dispatcher.Add<BoardAvailableData>([&](const auto& data) { wasDispatched = true; DoSignal(sessionId, data, xmlData); });
+            dispatcher.Add<RevokeBoardAvailableData>([&](const auto& data) { wasDispatched = true; DoSignal(sessionId, data, xmlData); });
+            dispatcher.Add<TransportFinishedData>([&](const auto& data) { wasDispatched = true; DoSignal(sessionId, data, xmlData); });
+            dispatcher.Add<BoardForecastData>([&](const auto& data) { wasDispatched = true; DoSignal(sessionId, data, xmlData); });
+            dispatcher.Add<SendBoardInfoData>([&](const auto& data) { wasDispatched = true; DoSignal(sessionId, data, xmlData); });
+            dispatcher.Add<NotificationData>([&](const auto& data) { wasDispatched = true; DoSignal(sessionId, data, xmlData); });
+            dispatcher.Add<CheckAliveData>([&](const auto& data) { wasDispatched = true; DoSignal(sessionId, data, xmlData); });
+
+            dispatcher.Dispatch(parseData);
+            if (wasDispatched)
+                return;
+
+            DoSignal(sessionId, NotificationData{}, xmlData);
+        });
+    }
+    void Reset(StringView rawXml) override
+    {
+        m_service.Log(0U, "ResetHermesDownstreamRawXml");
+        m_service.Post([this, data = std::string{rawXml}]() mutable
+        {
+            if (!data.empty() && m_upSession)
+            {
+                m_upSession->Signal(NotificationData(), data);
+            }
+            DoReset();
+        });
+    }
+
+    void Disable(const NotificationData& in_data) override
+    {
+        m_service.Log(0U, "DisableHermesDownstream");
+        m_service.Post([this, data = in_data]()
+        {
+            DoDisable(data);
+        });
+    }
+    void Stop() override
+    {
+        m_service.Log(0U, "StopHermesDownstream");
+        m_service.Post([this]()
+        {
+            DoStop();
+        });
+    }
+    void Delete() override
+    {
+        m_service.Log(0U, "DeleteHermesDownstream");
+        m_service.Stop();
+        delete this;
+    }
+
+    void Post(std::function<void()>&& func) override
+    {
+        m_service.Log(0U, "PostHermesDownstream");
+        m_service.Post(std::move(func));
+    }
+
+private:
+    unsigned m_laneId = 0U;
+    Service m_service;
+    DownstreamSettings m_settings;
+
+    std::unique_ptr<Session> m_upSession;
+    std::unique_ptr<IAcceptor>  m_upAcceptor{ CreateAcceptor(m_service, *this) };
+
+    DownstreamCallbackHolder m_callbacks;
+
+    bool m_enabled{ false };
+
     //================= forwarding calls =========================
-    void Enable(const DownstreamSettings& settings)
+    void DoEnable(const DownstreamSettings& settings)
     {
         m_service.Log(0U, "Enable(", settings, "); m_enabled=", m_enabled, ", m_settings=", m_settings);
 
@@ -198,8 +306,17 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         m_upAcceptor->StartListening(networkConfiguration);
     }
 
-    template<class DataT>
-    void Signal(unsigned sessionId, const DataT& data, StringView rawXml)
+    template<typename DataT> void DoSignal(const char* api, unsigned sessionId, const DataT& in_data)
+    {
+        m_service.Log(sessionId, api);
+        m_service.Post([this, sessionId, data = in_data]()
+        {
+            DoSignal(sessionId, data, Serialize(data));
+        });
+    }
+
+    template<typename DataT>
+    void DoSignal(unsigned sessionId, const DataT& data, StringView rawXml)
     {
         m_service.Log(sessionId, "Signal(", data, ',', rawXml, ')');
 
@@ -210,7 +327,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         pSession->Signal(data, rawXml);
     }
 
-    void Disable(const NotificationData& notificationData)
+    void DoDisable(const NotificationData& notificationData)
     {
         m_service.Log(0U, "Disable(", notificationData, "); m_enabled=", m_enabled);
 
@@ -222,7 +339,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         RemoveCurrentSession_(notificationData);
     }
 
-    void Stop()
+    void DoStop()
     {
         m_service.Log(0U, "Stop()");
         NotificationData notificationData(ENotificationCode::eMACHINE_SHUTDOWN, ESeverity::eINFO, "Downstream service stopped by application");
@@ -355,7 +472,7 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         {
             CheckAliveData data{in_data};
             data.m_optionalType = ECheckAliveType::ePONG;
-            m_service.Post([this, sessionId, data = std::move(data)]() { Signal(sessionId, data, Serialize(data)); });
+            m_service.Post([this, sessionId, data = std::move(data)]() { DoSignal(sessionId, data, Serialize(data)); });
         }
 
         m_callbacks->On(sessionId, in_data);
@@ -381,12 +498,12 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
         m_callbacks->OnDisconnected(sessionId, EState::eDISCONNECTED, error);
     }
 
-    void Reset(const NotificationData& data)
+    void DoReset(const NotificationData& data)
     {
         RemoveCurrentSession_(data);
     }
 
-    void Reset()
+    void DoReset()
     {
         RemoveCurrentSession_();
     }
@@ -429,10 +546,15 @@ struct HermesDownstream : IAcceptorCallback, ISessionCallback
 };
 
 //===================== implementation of public C functions ====================
-#ifdef HERMES_CPP_ABI
-HermesDownstream* Hermes::CreateHermesDownstream(uint32_t laneId, IDownstreamCallback& callback)
+static DownstreamPtrT<HermesDownstream> DoCreateHermesDownstream(uint32_t laneId, DownstreamCallbackHolder&& callback)
 {
-    return new HermesDownstream(laneId, DownstreamCallbackHolder{ callback });
+    return DownstreamPtrT<HermesDownstream>{ new HermesDownstream(laneId, std::move(callback)) };
+}
+
+#ifdef HERMES_CPP_ABI
+DownstreamPtr Hermes::CreateHermesDownstream(uint32_t laneId, IDownstreamCallback& callback)
+{
+    return DoCreateHermesDownstream(laneId, DownstreamCallbackHolder{ callback });
 }
 #else
 #error "HERMES_CPP_ABI should always be defined for building Hermes library"
@@ -440,193 +562,109 @@ HermesDownstream* Hermes::CreateHermesDownstream(uint32_t laneId, IDownstreamCal
 
 HermesDownstream* CreateHermesDownstream(uint32_t laneId, const HermesDownstreamCallbacks* pCallbacks)
 {
-    return new HermesDownstream(laneId, DownstreamCallbackHolder{ *pCallbacks });
+    return DoCreateHermesDownstream(laneId, DownstreamCallbackHolder{ *pCallbacks }).release();
 }
 
 void RunHermesDownstream(HermesDownstream* pDownstream)
 {
-    pDownstream->m_service.Log(0U, "RunHermesDownstream");
-    pDownstream->m_service.Run();
+    pDownstream->Run();
 }
 
 void EnableHermesDownstream(HermesDownstream* pDownstream, const HermesDownstreamSettings* pSettings)
 {
-    pDownstream->m_service.Log(0U, "EnableHermesDownstream");
-    auto settings = ToCpp(*pSettings);
-    if (!settings.m_port)
-    {
-        settings.m_port = static_cast<uint16_t>(cBASE_PORT + pDownstream->m_laneId);
-    }
-    pDownstream->m_service.Post([pDownstream, settings = std::move(settings)]()
-    {
-        pDownstream->Enable(settings);
-    });
+    pDownstream->Enable(ToCpp(*pSettings));
 }
 
 void PostHermesDownstream(HermesDownstream* pDownstream, HermesVoidCallback voidCallback)
 {
-    pDownstream->m_service.Log(0U, "PostHermesDownstream");
-    pDownstream->m_service.Post([voidCallback]
-    {
-        voidCallback.m_pCall(voidCallback.m_pData);
-    });
+    auto function = [voidCallback]() {voidCallback.m_pCall(voidCallback.m_pData); };
+    pDownstream->Post(function);
 }
 
 void SignalHermesDownstreamServiceDescription(HermesDownstream* pDownstream, uint32_t sessionId, const HermesServiceDescriptionData* pData)
 {
-    pDownstream->m_service.Log(sessionId, "SignalHermesDownstreamServiceDescription");
-    pDownstream->m_service.Post([pDownstream, sessionId, data = ToCpp(*pData)]()
-    {
-        pDownstream->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pDownstream->Signal(sessionId, data);
 }
 
 void SignalHermesBoardAvailable(HermesDownstream* pDownstream, uint32_t sessionId, const HermesBoardAvailableData* pData)
 {
-    pDownstream->m_service.Log(sessionId, "SignalHermesBoardAvailable");
-    pDownstream->m_service.Post([pDownstream, sessionId, data = ToCpp(*pData)]()
-    {
-        pDownstream->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pDownstream->Signal(sessionId, data);
 }
 
 void SignalHermesRevokeBoardAvailable(HermesDownstream* pDownstream, uint32_t sessionId, const HermesRevokeBoardAvailableData* pData)
 {
-    pDownstream->m_service.Log(sessionId, "SignalHermesRevokeBoardAvailable");
-    pDownstream->m_service.Post([pDownstream, sessionId, data = ToCpp(*pData)]()
-    {
-        pDownstream->Signal(sessionId, data, Serialize(data));
-    });
-
+    auto data = ToCpp(*pData);
+    pDownstream->Signal(sessionId, data);
 }
 
 void SignalHermesTransportFinished(HermesDownstream* pDownstream, uint32_t sessionId, const HermesTransportFinishedData* pData)
 {
-    pDownstream->m_service.Log(sessionId, "SignalHermesTransportFinished");
-    pDownstream->m_service.Post([pDownstream, sessionId, data = ToCpp(*pData)]()
-    {
-        pDownstream->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pDownstream->Signal(sessionId, data);
 }
 
 void SignalHermesBoardForecast(HermesDownstream* pDownstream, uint32_t sessionId, const HermesBoardForecastData* pData)
 {
-    pDownstream->m_service.Log(sessionId, "SignalHermesBoardForecast");
-    pDownstream->m_service.Post([pDownstream, sessionId, data = ToCpp(*pData)]()
-    {
-        pDownstream->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pDownstream->Signal(sessionId, data);
 }
 
 void SignalHermesSendBoardInfo(HermesDownstream* pDownstream, uint32_t sessionId, const HermesSendBoardInfoData* pData)
 {
-    pDownstream->m_service.Log(sessionId, "SignalHermesSendBoardInfo");
-    pDownstream->m_service.Post([pDownstream, sessionId, data = ToCpp(*pData)]()
-    {
-        pDownstream->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pDownstream->Signal(sessionId, data);
 }
 
 void SignalHermesDownstreamNotification(HermesDownstream* pDownstream, uint32_t sessionId, const HermesNotificationData* pData)
 {
-    pDownstream->m_service.Log(0U, "SignalHermesDownstreamNotification");
-    pDownstream->m_service.Post([pDownstream, sessionId, data = ToCpp(*pData)]()
-    {
-        pDownstream->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pDownstream->Signal(sessionId, data);
 }
 
 void SignalHermesDownstreamCommand(HermesDownstream* pDownstream, uint32_t sessionId, const HermesCommandData* pData)
 {
-    pDownstream->m_service.Log(0U, "SignalHermesDownstreamCommand");
-
-    pDownstream->m_service.Post([pDownstream, sessionId, data = ToCpp(*pData)]()
-    {
-        pDownstream->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pDownstream->Signal(sessionId, data);
 }
 
 void SignalHermesDownstreamCheckAlive(HermesDownstream* pDownstream, uint32_t sessionId, const HermesCheckAliveData* pData)
 {
-    pDownstream->m_service.Log(0U, "SignalHermesDownstreamCheckAlive");
-    pDownstream->m_service.Post([pDownstream, sessionId, data = ToCpp(*pData)]()
-    {
-        pDownstream->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pDownstream->Signal(sessionId, data);
 }
 
 void ResetHermesDownstream(HermesDownstream* pDownstream, const HermesNotificationData* pData)
 {
-    pDownstream->m_service.Log(0U, "ResetHermesDownstream");
-    pDownstream->m_service.Post([pDownstream, data = ToCpp(*pData)]()
-    {
-        pDownstream->Reset(data);
-    });
+    auto data = ToCpp(*pData);
+    pDownstream->Reset(data);
 }
 
 void SignalHermesDownstreamRawXml(HermesDownstream* pDownstream, uint32_t sessionId, HermesStringView rawXml)
 {
-    pDownstream->m_service.Log(sessionId, "SignalHermesDownstreamRawXml");
-    pDownstream->m_service.Post([pDownstream, sessionId, xmlData = std::string(rawXml.m_pData, rawXml.m_size)]() mutable
-    {
-        MessageDispatcher dispatcher{sessionId, pDownstream->m_service};
-        auto parseData = xmlData;
-
-        bool wasDispatched = false;
-        dispatcher.Add<ServiceDescriptionData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<BoardAvailableData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<RevokeBoardAvailableData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<TransportFinishedData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<BoardForecastData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<SendBoardInfoData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<NotificationData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<CheckAliveData>([&](const auto& data) { wasDispatched = true; pDownstream->Signal(sessionId, data, xmlData); });
-        
-        dispatcher.Dispatch(parseData);
-        if (wasDispatched)
-            return;
-
-        pDownstream->Signal(sessionId, NotificationData{}, xmlData);
-    });
+    pDownstream->Signal(sessionId, ToCpp(rawXml));
 }
 
 void ResetHermesDownstreamRawXml(HermesDownstream* pDownstream, HermesStringView rawXml)
 {
-    pDownstream->m_service.Log(0U, "ResetHermesDownstreamRawXml");
-    pDownstream->m_service.Post([pDownstream, data = std::string(rawXml.m_pData, rawXml.m_size)]() mutable
-    {
-        if (!data.empty() && pDownstream->m_upSession)
-        {
-            pDownstream->m_upSession->Signal(NotificationData(), data);
-        }
-        pDownstream->Reset();
-    });
+    pDownstream->Reset(ToCpp(rawXml));
 }
 
 void DisableHermesDownstream(HermesDownstream* pDownstream, const HermesNotificationData* pData)
 {
-    pDownstream->m_service.Log(0U, "DisableHermesDownstream");
-    pDownstream->m_service.Post([pDownstream, data = ToCpp(*pData)]()
-    {
-        pDownstream->Disable(data);
-    });
+    auto data = ToCpp(*pData);
+    pDownstream->Disable(data);
 }
 
 void StopHermesDownstream(HermesDownstream* pDownstream)
 {
-    pDownstream->m_service.Log(0U, "StopHermesDownstream");
-    pDownstream->m_service.Post([pDownstream]()
-    {
-        pDownstream->Stop();
-    });
+    pDownstream->Stop();
 }
 
 void DeleteHermesDownstream(HermesDownstream* pDownstream)
 {
     if (!pDownstream)
         return;
-
-    pDownstream->m_service.Log(0U, "DeleteHermesDownstream");
-    pDownstream->m_service.Stop();
-    delete pDownstream;
+    pDownstream->Delete();
 }
