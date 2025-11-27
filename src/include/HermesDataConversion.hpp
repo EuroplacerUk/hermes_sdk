@@ -73,6 +73,12 @@ namespace Hermes
         return callback;
     }
 
+    inline std::function<void()> CToCpp(HermesVoidCallback callback)
+    {
+        auto fn = [callback]() {callback.m_pCall(callback.m_pData); };
+        return fn;
+    }
+
     // check whether we got the constants right:
     static_assert(cCONFIG_PORT == cHERMES_CONFIG_PORT, "");
     static_assert(cBASE_PORT == cHERMES_BASE_PORT, "");

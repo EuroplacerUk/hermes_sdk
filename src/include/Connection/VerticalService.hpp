@@ -120,7 +120,7 @@ namespace Hermes
         HermesVerticalService* m_pImpl = nullptr;
     };
 
-    typedef std::unique_ptr<IVerticalService> VerticalServicePtr;
+    typedef std::unique_ptr<VerticalService> VerticalServicePtr;
 
     inline VerticalServicePtr CreateHermesVerticalService(IVerticalServiceCallback& callback) {
         return std::make_unique<VerticalService>(callback);

@@ -551,7 +551,7 @@ void RunHermesUpstream(HermesUpstream* pUpstream)
 
 void PostHermesUpstream(HermesUpstream* pUpstream, HermesVoidCallback voidCallback)
 {
-    auto fn = [voidCallback]() { voidCallback.m_pCall(voidCallback.m_pData); };
+    auto fn = CToCpp(voidCallback);
     pUpstream->Post(std::move(fn));
 
 }

@@ -137,8 +137,119 @@ struct VerticalClientCallbackHolder : CallbackHolder<IVerticalClientCallback, Ve
     }
 };
 
-struct HermesVerticalClient : ISessionCallback
+struct HermesVerticalClient : IVerticalClient, ISessionCallback
 {
+    HermesVerticalClient(VerticalClientCallbackHolder&& callbacks) :
+        m_service(*callbacks),
+        m_callbacks { callbacks }
+    {
+        m_service.Inform(0U, "Created");
+    }
+
+    virtual ~HermesVerticalClient()
+    {
+        m_service.Inform(0U, "Deleted");
+    }
+
+    void Run() override {
+        m_service.Log(0U, "RunHermesVerticalClient");
+
+        m_service.Run();
+    }
+    void Post(std::function<void()>&& fn) override {
+        m_service.Log(0U, "PostHermesVerticalClient");
+
+        m_service.Post(std::move(fn));
+    }
+
+    void Enable(const VerticalClientSettings& in_settings) override {
+        m_service.Log(0U, "EnableHermesVerticalClient");
+        auto settings = in_settings;
+        if (!settings.m_port)
+        {
+            settings.m_port = static_cast<uint16_t>(cBASE_PORT);
+        }
+
+        m_service.Post([this, settings = std::move(settings)]()
+        {
+            this->DoEnable(settings);
+        });
+    }
+
+    void Signal(unsigned sessionId, const SupervisoryServiceDescriptionData& in_data)  override { DoSignal("SignalHermesVerticalClientDescription", sessionId, in_data); }
+    void Signal(unsigned sessionId, const GetConfigurationData& in_data)  override { DoSignal("SignalHermesVerticalGetConfiguration", sessionId, in_data); }
+    void Signal(unsigned sessionId, const SetConfigurationData& in_data) override { DoSignal("SignalHermesVerticalSetConfiguration", sessionId, in_data); }
+    void Signal(unsigned sessionId, const QueryHermesCapabilitiesData& in_data)  override { DoSignal("SignalHermesQueryHermesCapabilities", sessionId, in_data); }
+    void Signal(unsigned sessionId, const SendWorkOrderInfoData& in_data) override { DoSignal("SignalHermesSendWorkOrderInfo", sessionId, in_data); }
+    void Signal(unsigned sessionId, const NotificationData& in_data)  override { DoSignal("SignalHermesVerticalClientNotification", sessionId, in_data); }
+    void Signal(unsigned sessionId, const CheckAliveData& in_data)  override { DoSignal("SignalHermesVerticalClientCheckAlive", sessionId, in_data); }
+    void Reset(const NotificationData& in_data)  override {  
+        m_service.Log(0U, "ResetHermesVerticalClient");
+
+        m_service.Post([this, data = in_data]()
+        {
+            this->DoReset(data);
+        });
+    }
+
+    // raw XML for testing
+    virtual void Signal(unsigned sessionId, StringView rawXml)  override {
+        m_service.Log(sessionId, "SignalHermesVerticalClientRawXml");
+        m_service.Post([this, sessionId, xmlData = std::string{ rawXml }]() mutable
+        {
+            MessageDispatcher dispatcher{ sessionId, m_service };
+            auto parseData = xmlData;
+
+            bool wasDispatched = false;
+            dispatcher.Add<SupervisoryServiceDescriptionData>([&](const auto& data) { wasDispatched = true; this->DoSignal(sessionId, data, xmlData); });
+            dispatcher.Add<SendWorkOrderInfoData>([&](const auto& data) { wasDispatched = true; this->DoSignal(sessionId, data, xmlData); });
+            dispatcher.Add<GetConfigurationData>([&](const auto& data) { wasDispatched = true; this->DoSignal(sessionId, data, xmlData); });
+            dispatcher.Add<SetConfigurationData>([&](const auto& data) { wasDispatched = true; this->DoSignal(sessionId, data, xmlData); });
+            dispatcher.Add<NotificationData>([&](const auto& data) { wasDispatched = true; this->DoSignal(sessionId, data, xmlData); });
+            dispatcher.Add<CheckAliveData>([&](const auto& data) { wasDispatched = true; this->DoSignal(sessionId, data, xmlData); });
+
+            dispatcher.Dispatch(parseData);
+            if (wasDispatched)
+                return;
+
+            this->DoSignal(sessionId, NotificationData{}, xmlData);
+        });
+    }
+    virtual void Reset(StringView rawXml) override {
+        m_service.Log(0U, "ResetHermesVerticalClientRawXml");
+        m_service.Post([this, data = std::string{ rawXml }]()
+        {
+            if (!data.empty() && m_upSession)
+            {
+                m_upSession->Signal(NotificationData(), data);
+            }
+            DoReset();
+        });
+    }
+
+    void Disable(const NotificationData& in_data)  override {
+        m_service.Log(0U, "DisableHermesVerticalClient");
+        m_service.Post([this, data = in_data]()
+        {
+            this->DoDisable(data);
+        });
+    }
+    virtual void Stop()  override {
+        m_service.Log(0U, "StopHermesVerticalClient");
+
+        m_service.Post([this]()
+        {
+            this->DoStop();
+        });
+    }
+    virtual void Delete() override {
+        m_service.Log(0U, "DeleteHermesVerticalClient");
+
+        m_service.Stop();
+        delete this;
+    }
+
+private:
     Service m_service;
     asio::system_timer m_timer{ m_service.GetUnderlyingService() };
     VerticalClientSettings m_settings;
@@ -152,19 +263,7 @@ struct HermesVerticalClient : ISessionCallback
 
     bool m_enabled{ false };
 
-    HermesVerticalClient(VerticalClientCallbackHolder&& callbacks) :
-        m_service(*callbacks),
-        m_callbacks { callbacks }
-    {
-        m_service.Inform(0U, "Created");
-    }
-
-    virtual ~HermesVerticalClient()
-    {
-        m_service.Inform(0U, "Deleted");
-    }
-
-    void Enable(const VerticalClientSettings& settings)
+    void DoEnable(const VerticalClientSettings& settings)
     {
         m_service.Log(0U, "Enable(", settings, "); m_enabled=", m_enabled, ", m_settings=", m_settings);
 
@@ -179,7 +278,7 @@ struct HermesVerticalClient : ISessionCallback
         CreateNewSession_();
     }
 
-    void Disable(const NotificationData& notificationData)
+    void DoDisable(const NotificationData& notificationData)
     {
         m_service.Log(0U, "Disable(", notificationData, "); m_enabled=", m_enabled);
 
@@ -190,8 +289,17 @@ struct HermesVerticalClient : ISessionCallback
         RemoveSession_(notificationData);
     }
 
+    template <typename DataT> void DoSignal(const char* fn, unsigned sessionId, const DataT& in_data)
+    {
+        m_service.Log(sessionId, fn);
+        m_service.Post([this, sessionId, data = in_data]()
+        {
+            this->DoSignal(sessionId, data, Serialize(data));
+        });
+    }
+
     template<class DataT>
-    void Signal(unsigned sessionId, const DataT& data, StringView rawXml)
+    void DoSignal(unsigned sessionId, const DataT& data, StringView rawXml)
     {
         m_service.Log(sessionId, "Signal(", data, ',', rawXml, ')');
 
@@ -202,7 +310,7 @@ struct HermesVerticalClient : ISessionCallback
         pSession->Signal(data, rawXml);
     }
 
-    void Stop()
+    void DoStop()
     {
         m_service.Log(0U, "Stop()");
 
@@ -306,7 +414,7 @@ struct HermesVerticalClient : ISessionCallback
         {
             CheckAliveData data{ in_data };
             data.m_optionalType = ECheckAliveType::ePONG;
-            m_service.Post([this, sessionId, data = std::move(data)]() { Signal(sessionId, data, Serialize(data)); });
+            m_service.Post([this, sessionId, data = std::move(data)]() { DoSignal(sessionId, data, Serialize(data)); });
         }
         m_callbacks->On(sessionId, in_data);
     }
@@ -330,13 +438,13 @@ struct HermesVerticalClient : ISessionCallback
         m_callbacks->OnDisconnected(sessionId, state, error);
     }
 
-    void Reset()
+    void DoReset()
     {
         RemoveSession_();
         DelayCreateNewSession_(1.0);
     }
 
-    void Reset(const NotificationData& data)
+    void DoReset(const NotificationData& data)
     {
         RemoveSession_(data);
         DelayCreateNewSession_(1.0);
@@ -414,141 +522,96 @@ struct HermesVerticalClient : ISessionCallback
 };
 
 //===================== implementation of public C functions =====================
-HermesVerticalClient* Hermes::CreateHermesVerticalClient(IVerticalClientCallback& callback)
+static VerticalClientPtrT<HermesVerticalClient> DoCreateHermesVerticalClient(VerticalClientCallbackHolder&& callback)
 {
-    return new HermesVerticalClient(VerticalClientCallbackHolder{ callback });
+    return VerticalClientPtrT<HermesVerticalClient>{ new HermesVerticalClient(std::move(callback)) };
+}
+
+VerticalClientPtr Hermes::CreateHermesVerticalClient(IVerticalClientCallback& callback)
+{
+    return DoCreateHermesVerticalClient(VerticalClientCallbackHolder{ callback });
 }
 
 HermesVerticalClient* CreateHermesVerticalClient(const HermesVerticalClientCallbacks* pCallbacks)
 {
-    return new HermesVerticalClient(VerticalClientCallbackHolder{ *pCallbacks });
+    return DoCreateHermesVerticalClient(VerticalClientCallbackHolder{ *pCallbacks }).release();
 }
 
 void RunHermesVerticalClient(HermesVerticalClient* pVerticalClient)
 {
-    pVerticalClient->m_service.Log(0U, "RunHermesVerticalClient");
-
-    pVerticalClient->m_service.Run();
+    pVerticalClient->Run();
 }
 
 void PostHermesVerticalClient(HermesVerticalClient* pVerticalClient, HermesVoidCallback voidCallback)
 {
-    pVerticalClient->m_service.Log(0U, "PostHermesVerticalClient");
-
-    pVerticalClient->m_service.Post([voidCallback]
-    {
-        voidCallback.m_pCall(voidCallback.m_pData);
-    });
+    auto fn = CToCpp(voidCallback);
+    pVerticalClient->Post(std::move(fn));
 }
 
 void EnableHermesVerticalClient(HermesVerticalClient* pVerticalClient, const HermesVerticalClientSettings* pSettings)
 {
-    pVerticalClient->m_service.Log(0U, "EnableHermesVerticalClient");
-    auto settings = ToCpp(*pSettings);
-    if (!settings.m_port)
-    {
-        settings.m_port = static_cast<uint16_t>(cBASE_PORT);
-    }
-
-    pVerticalClient->m_service.Post([pVerticalClient, settings = std::move(settings)]()
-    {
-        pVerticalClient->Enable(settings);
-    });
+    auto data = ToCpp(*pSettings);
+    pVerticalClient->Enable(data);
 }
 
 void SignalHermesVerticalClientDescription(HermesVerticalClient* pVerticalClient, uint32_t sessionId, const HermesSupervisoryServiceDescriptionData* pData)
 {
-    pVerticalClient->m_service.Log(sessionId, "SignalHermesVerticalClientDescription");
-    pVerticalClient->m_service.Post([pVerticalClient, sessionId, data = ToCpp(*pData)]()
-    {
-        pVerticalClient->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pVerticalClient->Signal(sessionId, data);
 }
 
 void SignalHermesSendWorkOrderInfo(HermesVerticalClient* pVerticalClient, uint32_t sessionId, const HermesSendWorkOrderInfoData* pData)
 {
-    pVerticalClient->m_service.Log(sessionId, "SignalHermesSendWorkOrderInfo");
-    pVerticalClient->m_service.Post([pVerticalClient, sessionId, data = ToCpp(*pData)]()
-    {
-        pVerticalClient->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pVerticalClient->Signal(sessionId, data);
 }
 
 void SignalHermesVerticalGetConfiguration(HermesVerticalClient* pVerticalClient, uint32_t sessionId, const HermesGetConfigurationData* pData)
 {
-    pVerticalClient->m_service.Log(sessionId, "SignalHermesVerticalGetConfiguration");
-    pVerticalClient->m_service.Post([pVerticalClient, sessionId, data = ToCpp(*pData)]()
-    {
-        pVerticalClient->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pVerticalClient->Signal(sessionId, data);
 }
 
 void SignalHermesVerticalSetConfiguration(HermesVerticalClient* pVerticalClient, uint32_t sessionId, const HermesSetConfigurationData* pData)
 {
-    pVerticalClient->m_service.Log(sessionId, "SignalHermesVerticalSetConfiguration");
-    pVerticalClient->m_service.Post([pVerticalClient, sessionId, data = ToCpp(*pData)]()
-    {
-        pVerticalClient->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pVerticalClient->Signal(sessionId, data);
 }
 
 void SignalHermesVerticalQueryHermesCapabilities(HermesVerticalClient* pVerticalClient, uint32_t sessionId, const HermesQueryHermesCapabilitiesData* pData)
 {
-    pVerticalClient->m_service.Log(sessionId, "SignalHermesQueryHermesCapabilities");
-    pVerticalClient->m_service.Post([pVerticalClient, sessionId, data = ToCpp(*pData)]()
-        {
-            pVerticalClient->Signal(sessionId, data, Serialize(data));
-        });
+    auto data = ToCpp(*pData);
+    pVerticalClient->Signal(sessionId, data);
 }
 
 void SignalHermesVerticalClientNotification(HermesVerticalClient* pVerticalClient, uint32_t sessionId, const HermesNotificationData* pData)
 {
-    pVerticalClient->m_service.Log(0U, "SignalHermesVerticalClientNotification");
-
-    pVerticalClient->m_service.Post([pVerticalClient, sessionId, data = ToCpp(*pData)]()
-    {
-        pVerticalClient->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pVerticalClient->Signal(sessionId, data);
 }
 
 void SignalHermesVerticalClientCheckAlive(HermesVerticalClient* pVerticalClient, uint32_t sessionId, const HermesCheckAliveData* pData)
 {
-    pVerticalClient->m_service.Log(0U, "SignalHermesVerticalClientCheckAlive");
-
-    pVerticalClient->m_service.Post([pVerticalClient, sessionId, data = ToCpp(*pData)]()
-    {
-        pVerticalClient->Signal(sessionId, data, Serialize(data));
-    });
+    auto data = ToCpp(*pData);
+    pVerticalClient->Signal(sessionId, data);
 }
 
 void ResetHermesVerticalClient(HermesVerticalClient* pVerticalClient, const HermesNotificationData* pData)
 {
-    pVerticalClient->m_service.Log(0U, "ResetHermesVerticalClient");
-
-    pVerticalClient->m_service.Post([pVerticalClient, data = ToCpp(*pData)]()
-    {
-        pVerticalClient->Reset(data);
-    });
+    auto data = ToCpp(*pData);
+    pVerticalClient->Reset(data);
 }
 
 
 void DisableHermesVerticalClient(HermesVerticalClient* pVerticalClient, const HermesNotificationData* pData)
 {
-    pVerticalClient->m_service.Log(0U, "DisableHermesVerticalClient");
-    pVerticalClient->m_service.Post([pVerticalClient, data = ToCpp(*pData)]()
-    {
-        pVerticalClient->Disable(data);
-    });
+    auto data = ToCpp(*pData);
+    pVerticalClient->Disable(data);
 }
 
 void StopHermesVerticalClient(HermesVerticalClient* pVerticalClient)
 {
-    pVerticalClient->m_service.Log(0U, "StopHermesVerticalClient");
-
-    pVerticalClient->m_service.Post([pVerticalClient]()
-    {
-        pVerticalClient->Stop();
-    });
+    pVerticalClient->Stop();
 }
 
 void DeleteHermesVerticalClient(HermesVerticalClient* pVerticalClient)
@@ -556,45 +619,15 @@ void DeleteHermesVerticalClient(HermesVerticalClient* pVerticalClient)
     if (!pVerticalClient)
         return;
 
-    pVerticalClient->m_service.Log(0U, "DeleteHermesVerticalClient");
-
-    pVerticalClient->m_service.Stop();
-    delete pVerticalClient;
+    pVerticalClient->Delete();
 }
 
 void SignalHermesVerticalClientRawXml(HermesVerticalClient* pVerticalClient, uint32_t sessionId, HermesStringView rawXml)
 {
-    pVerticalClient->m_service.Log(sessionId, "SignalHermesVerticalClientRawXml");
-    pVerticalClient->m_service.Post([pVerticalClient, sessionId, xmlData = std::string(rawXml.m_pData, rawXml.m_size)]() mutable
-    {
-        MessageDispatcher dispatcher{ sessionId, pVerticalClient->m_service };
-        auto parseData = xmlData;
-
-        bool wasDispatched = false;
-        dispatcher.Add<SupervisoryServiceDescriptionData>([&](const auto& data) { wasDispatched = true; pVerticalClient->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<SendWorkOrderInfoData>([&](const auto& data) { wasDispatched = true; pVerticalClient->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<GetConfigurationData>([&](const auto& data) { wasDispatched = true; pVerticalClient->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<SetConfigurationData>([&](const auto& data) { wasDispatched = true; pVerticalClient->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<NotificationData>([&](const auto& data) { wasDispatched = true; pVerticalClient->Signal(sessionId, data, xmlData); });
-        dispatcher.Add<CheckAliveData>([&](const auto& data) { wasDispatched = true; pVerticalClient->Signal(sessionId, data, xmlData); });
-
-        dispatcher.Dispatch(parseData);
-        if (wasDispatched)
-            return;
-
-        pVerticalClient->Signal(sessionId, NotificationData{}, xmlData);
-    });
+    pVerticalClient->Signal(sessionId, ToCpp(rawXml));
 }
 
 void ResetHermesVerticalClientRawXml(HermesVerticalClient* pVerticalClient, HermesStringView rawXml)
 {
-    pVerticalClient->m_service.Log(0U, "ResetHermesVerticalClientRawXml");
-    pVerticalClient->m_service.Post([pVerticalClient, data = std::string(rawXml.m_pData, rawXml.m_size)]()
-    {
-        if (!data.empty() && pVerticalClient->m_upSession)
-        {
-            pVerticalClient->m_upSession->Signal(NotificationData(), data);
-        }
-        pVerticalClient->Reset();
-    });
+    pVerticalClient->Reset(ToCpp(rawXml));
 }

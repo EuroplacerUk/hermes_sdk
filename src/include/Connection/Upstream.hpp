@@ -163,7 +163,7 @@ namespace Hermes
         HermesUpstream* m_pImpl = nullptr;
     };
 
-    typedef std::unique_ptr<IUpstream> UpstreamPtr;
+    typedef std::unique_ptr<Upstream> UpstreamPtr;
 
     inline UpstreamPtr CreateHermesUpstream(uint32_t laneId, IUpstreamCallback& callback) {
         return std::make_unique<Upstream>(laneId, callback);

@@ -544,8 +544,8 @@ void EnableHermesDownstream(HermesDownstream* pDownstream, const HermesDownstrea
 
 void PostHermesDownstream(HermesDownstream* pDownstream, HermesVoidCallback voidCallback)
 {
-    auto function = [voidCallback]() {voidCallback.m_pCall(voidCallback.m_pData); };
-    pDownstream->Post(function);
+    auto function = CToCpp(voidCallback);
+    pDownstream->Post(std::move(function));
 }
 
 void SignalHermesDownstreamServiceDescription(HermesDownstream* pDownstream, uint32_t sessionId, const HermesServiceDescriptionData* pData)

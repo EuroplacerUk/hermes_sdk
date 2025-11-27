@@ -485,7 +485,7 @@ void RunHermesVerticalService(HermesVerticalService* pVerticalService)
 
 void PostHermesVerticalService(HermesVerticalService* pVerticalService, HermesVoidCallback voidCallback)
 {
-    auto fn = [voidCallback]() {voidCallback.m_pCall(voidCallback.m_pData); };
+    auto fn = CToCpp(voidCallback);
     pVerticalService->Post(std::move(fn));
 }
 
@@ -599,5 +599,8 @@ void StopHermesVerticalService(HermesVerticalService* pVerticalService)
 
 void DeleteHermesVerticalService(HermesVerticalService* pVerticalService)
 {
+    if (!pVerticalService)
+        return;
+
     pVerticalService->Delete();
 }
