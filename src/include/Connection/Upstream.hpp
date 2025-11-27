@@ -127,7 +127,7 @@ namespace Hermes
 
     HERMESPROTOCOL_API UpstreamPtr CreateHermesUpstream(uint32_t laneId, IUpstreamCallback& callback);
 #else
-    class Upstream
+    class Upstream : public IUpstream
     {
     public:
         explicit Upstream(unsigned laneId, IUpstreamCallback&);
@@ -135,27 +135,29 @@ namespace Hermes
         Upstream& operator=(const Upstream&) = delete;
         ~Upstream() { ::DeleteHermesUpstream(m_pImpl); }
 
-        void Run();
-        template<class F> void Post(F&&);
-        void Enable(const UpstreamSettings&);
+        void Run() override;
+        void Enable(const UpstreamSettings&) override;
 
-        void Signal(unsigned sessionId, const ServiceDescriptionData&);
-        void Signal(unsigned sessionId, const MachineReadyData&);
-        void Signal(unsigned sessionId, const RevokeMachineReadyData&);
-        void Signal(unsigned sessionId, const StartTransportData&);
-        void Signal(unsigned sessionId, const StopTransportData&);
-        void Signal(unsigned sessionId, const QueryBoardInfoData&);
-        void Signal(unsigned sessionId, const NotificationData&);
-        void Signal(unsigned sessionId, const CheckAliveData&);
-        void Signal(unsigned sessionId, const CommandData&);
-        void Reset(const NotificationData&);
+        void Signal(unsigned sessionId, const ServiceDescriptionData&) override;
+        void Signal(unsigned sessionId, const MachineReadyData&) override;
+        void Signal(unsigned sessionId, const RevokeMachineReadyData&) override;
+        void Signal(unsigned sessionId, const StartTransportData&) override;
+        void Signal(unsigned sessionId, const StopTransportData&) override;
+        void Signal(unsigned sessionId, const QueryBoardInfoData&) override;
+        void Signal(unsigned sessionId, const NotificationData&) override;
+        void Signal(unsigned sessionId, const CheckAliveData&) override;
+        void Signal(unsigned sessionId, const CommandData&) override;
+        void Reset(const NotificationData&) override;
 
         // raw XML for testing
-        void Signal(unsigned sessionId, StringView rawXml);
-        void Reset(StringView rawXml);
+        void Signal(unsigned sessionId, StringView rawXml) override;
+        void Reset(StringView rawXml) override;
 
-        void Disable(const NotificationData&);
-        void Stop();
+        void Disable(const NotificationData&) override;
+        void Stop() override;
+        void Post(std::function<void()>&&) override;
+
+        void Delete() override { ::DeleteHermesUpstream(m_pImpl); m_pImpl = nullptr; }
 
     private:
         HermesUpstream* m_pImpl = nullptr;
@@ -163,7 +165,7 @@ namespace Hermes
 
     typedef std::unique_ptr<IUpstream> UpstreamPtr;
 
-    UpstreamPtr CreateHermesUpstream(uint32_t laneId, IUpstreamCallback& callback) {
+    inline UpstreamPtr CreateHermesUpstream(uint32_t laneId, IUpstreamCallback& callback) {
         return std::make_unique<Upstream>(laneId, callback);
     }
 #endif

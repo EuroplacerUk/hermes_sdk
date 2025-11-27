@@ -48,7 +48,46 @@ namespace Hermes
     };
 
     //======================= VerticalService interface =====================================  
-    class VerticalService
+    struct IVerticalService
+    {
+        virtual void Run() = 0;
+
+        virtual void Post(std::function<void()>&&) = 0;
+        template<class F> void Post(F&& f) { Post(std::function<void()>{std::move(f)}); }
+        virtual void Enable(const VerticalServiceSettings&) = 0;
+
+        virtual void Signal(unsigned sessionId, const SupervisoryServiceDescriptionData&) = 0;
+        virtual void Signal(unsigned sessionId, const BoardArrivedData&) = 0; // only to a specific client
+        virtual void Signal(const BoardArrivedData&) = 0; // to all clients that have specified FeatureBoardTracking
+        virtual void Signal(unsigned sessionId, const BoardDepartedData&) = 0; // only to a specific client
+        virtual void Signal(const BoardDepartedData&) = 0; // to all clients that have specified FeatureBoardTracking
+        virtual void Signal(unsigned sessionId, const QueryWorkOrderInfoData&) = 0;
+        virtual void Signal(unsigned sessionId, const ReplyWorkOrderInfoData&) = 0;
+        virtual void Signal(unsigned sessionId, const SendHermesCapabilitiesData&) = 0;
+        virtual void Signal(unsigned sessionId, const CurrentConfigurationData&) = 0;
+        virtual void Signal(unsigned sessionId, const NotificationData&) = 0;
+        virtual void Signal(unsigned sessionId, const CheckAliveData&) = 0;
+        virtual void ResetSession(unsigned sessionId, const NotificationData&) = 0;
+
+        virtual void Disable(const NotificationData&) = 0;
+        virtual void Stop() = 0;
+
+        virtual void Delete() = 0;
+    };
+
+#ifdef HERMES_CPP_ABI
+    struct VerticalServiceDeleter {
+        void operator()(IVerticalService* ptr) { ptr->Delete(); }
+    };
+
+    template<typename T>
+    using VerticalServicePtrT = std::unique_ptr<T, VerticalServiceDeleter>;
+
+    typedef VerticalServicePtrT<IVerticalService> VerticalServicePtr;
+
+    HERMESPROTOCOL_API VerticalServicePtr CreateHermesVerticalService(IVerticalServiceCallback& callbacks);
+#else
+    class VerticalService : public IVerticalService
     {
     public:
         explicit VerticalService(IVerticalServiceCallback&);
@@ -56,110 +95,36 @@ namespace Hermes
         VerticalService& operator=(const VerticalService&) = delete;
         ~VerticalService() { ::DeleteHermesVerticalService(m_pImpl); }
 
-        void Run();
-        template<class F> void Post(F&&);
-        void Enable(const VerticalServiceSettings&);
+        void Run() override;
+        void Post(std::function<void()>&&) override;
+        void Enable(const VerticalServiceSettings&) override;
 
-        void Signal(unsigned sessionId, const SupervisoryServiceDescriptionData&);
-        void Signal(unsigned sessionId, const BoardArrivedData&); // only to a specific client
-        void Signal(const BoardArrivedData&); // to all clients that have specified FeatureBoardTracking
-        void Signal(unsigned sessionId, const BoardDepartedData&); // only to a specific client
-        void Signal(const BoardDepartedData&); // to all clients that have specified FeatureBoardTracking
-        void Signal(unsigned sessionId, const QueryWorkOrderInfoData&);
-        void Signal(unsigned sessionId, const ReplyWorkOrderInfoData&);
-        void Signal(unsigned sessionId, const SendHermesCapabilitiesData&);
-        void Signal(unsigned sessionId, const CurrentConfigurationData&);
-        void Signal(unsigned sessionId, const NotificationData&);
-        void Signal(unsigned sessionId, const CheckAliveData&);
-        void Signal(unsigned sessionId, const CommandData&);
-        void ResetSession(unsigned sessionId, const NotificationData&);
+        void Signal(unsigned sessionId, const SupervisoryServiceDescriptionData&) override;
+        void Signal(unsigned sessionId, const BoardArrivedData&) override; // only to a specific client
+        void Signal(const BoardArrivedData&) override; // to all clients that have specified FeatureBoardTracking
+        void Signal(unsigned sessionId, const BoardDepartedData&) override; // only to a specific client
+        void Signal(const BoardDepartedData&) override; // to all clients that have specified FeatureBoardTracking
+        void Signal(unsigned sessionId, const QueryWorkOrderInfoData&) override;
+        void Signal(unsigned sessionId, const ReplyWorkOrderInfoData&) override;
+        void Signal(unsigned sessionId, const SendHermesCapabilitiesData&) override;
+        void Signal(unsigned sessionId, const CurrentConfigurationData&) override;
+        void Signal(unsigned sessionId, const NotificationData&) override;
+        void Signal(unsigned sessionId, const CheckAliveData&) override;
+        void ResetSession(unsigned sessionId, const NotificationData&) override;
 
-        void Disable(const NotificationData&);
-        void Stop();
+        void Disable(const NotificationData&) override;
+        void Stop() override;
 
+        void Delete() override { ::DeleteHermesVerticalService(m_pImpl); m_pImpl = nullptr; }
     private:
         HermesVerticalService* m_pImpl = nullptr;
     };
 
-#ifdef HERMES_CPP_ABI
-    HERMESPROTOCOL_API HermesVerticalService* CreateHermesVerticalService(IVerticalServiceCallback& callbacks);
-#else
-    inline static HermesVerticalService* CreateHermesVerticalService(IVerticalServiceCallback& callback)
-    {
-        HermesVerticalServiceCallbacks callbacks{};
+    typedef std::unique_ptr<IVerticalService> VerticalServicePtr;
 
-        callbacks.m_connectedCallback.m_pData = &callback;
-        callbacks.m_connectedCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesVerticalState state,
-            const HermesConnectionInfo* pConnectionInfo)
-            {
-                static_cast<IVerticalServiceCallback*>(pCallback)->OnConnected(sessionId, ToCpp(state),
-                    ToCpp(*pConnectionInfo));
-            };
-
-        callbacks.m_serviceDescriptionCallback.m_pData = &callback;
-        callbacks.m_serviceDescriptionCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesVerticalState state,
-            const HermesSupervisoryServiceDescriptionData* pServiceDescriptionData)
-            {
-                static_cast<IVerticalServiceCallback*>(pCallback)->On(sessionId, ToCpp(state), ToCpp(*pServiceDescriptionData));
-            };
-
-        callbacks.m_getConfigurationCallback.m_pData = &callback;
-        callbacks.m_getConfigurationCallback.m_pCall = [](void* pCallback, uint32_t sessionId, const HermesGetConfigurationData* pData,
-            const HermesConnectionInfo* pInfo)
-            {
-                static_cast<IVerticalServiceCallback*>(pCallback)->On(sessionId, ToCpp(*pData), ToCpp(*pInfo));
-            };
-
-        callbacks.m_setConfigurationCallback.m_pData = &callback;
-        callbacks.m_setConfigurationCallback.m_pCall = [](void* pCallback, uint32_t sessionId, const HermesSetConfigurationData* pData,
-            const HermesConnectionInfo* pInfo)
-            {
-                static_cast<IVerticalServiceCallback*>(pCallback)->On(sessionId, ToCpp(*pData), ToCpp(*pInfo));
-            };
-
-        callbacks.m_sendWorkOrderInfoCallback.m_pData = &callback;
-        callbacks.m_sendWorkOrderInfoCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
-            const HermesSendWorkOrderInfoData* pData)
-            {
-                static_cast<IVerticalServiceCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
-            };
-
-        callbacks.m_queryHermesCapabilitiesCallback.m_pData = &callback;
-        callbacks.m_queryHermesCapabilitiesCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
-            const HermesQueryHermesCapabilitiesData* pData)
-            {
-                static_cast<IVerticalServiceCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
-            };
-
-        callbacks.m_notificationCallback.m_pData = &callback;
-        callbacks.m_notificationCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
-            const HermesNotificationData* pData)
-            {
-                static_cast<IVerticalServiceCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
-            };
-
-        callbacks.m_checkAliveCallback.m_pData = &callback;
-        callbacks.m_checkAliveCallback.m_pCall = [](void* pCallback, uint32_t sessionId,
-            const HermesCheckAliveData* pData)
-            {
-                static_cast<IVerticalServiceCallback*>(pCallback)->On(sessionId, ToCpp(*pData));
-            };
-
-        callbacks.m_disconnectedCallback.m_pData = &callback;
-        callbacks.m_disconnectedCallback.m_pCall = [](void* pCallback, uint32_t sessionId, EHermesVerticalState state,
-            const HermesError* pError)
-            {
-                static_cast<IVerticalServiceCallback*>(pCallback)->OnDisconnected(sessionId, ToCpp(state), ToCpp(*pError));
-            };
-
-        callbacks.m_traceCallback.m_pData = &callback;
-        callbacks.m_traceCallback.m_pCall = [](void* pCallback, unsigned sessionId, EHermesTraceType type,
-            HermesStringView trace)
-            {
-                static_cast<IVerticalServiceCallback*>(pCallback)->OnTrace(sessionId, ToCpp(type), ToCpp(trace));
-            };
-
-        return ::CreateHermesVerticalService(&callbacks);
+    inline VerticalServicePtr CreateHermesVerticalService(IVerticalServiceCallback& callback) {
+        return std::make_unique<VerticalService>(callback);
     }
+
 #endif
 }

@@ -137,30 +137,29 @@ namespace Hermes
         Downstream& operator=(const Downstream&) = delete;
         ~Downstream() { Delete(); }
 
-        void Run();
-        template<class F> void Post(F&&);
-        void Enable(const DownstreamSettings&);
+        void Run() override;
+        void Enable(const DownstreamSettings&) override;
 
-        void Signal(unsigned sessionId, const ServiceDescriptionData&);
-        void Signal(unsigned sessionId, const BoardAvailableData&);
-        void Signal(unsigned sessionId, const RevokeBoardAvailableData&);
-        void Signal(unsigned sessionId, const TransportFinishedData&);
-        void Signal(unsigned sessionId, const BoardForecastData&);
-        void Signal(unsigned sessionId, const SendBoardInfoData&);
-        void Signal(unsigned sessionId, const NotificationData&);
-        void Signal(unsigned sessionId, const CheckAliveData&);
-        void Signal(unsigned sessionId, const CommandData&);
-        void Reset(const NotificationData&);
+        void Signal(unsigned sessionId, const ServiceDescriptionData&) override;
+        void Signal(unsigned sessionId, const BoardAvailableData&) override;
+        void Signal(unsigned sessionId, const RevokeBoardAvailableData&) override;
+        void Signal(unsigned sessionId, const TransportFinishedData&) override;
+        void Signal(unsigned sessionId, const BoardForecastData&) override;
+        void Signal(unsigned sessionId, const SendBoardInfoData&) override;
+        void Signal(unsigned sessionId, const NotificationData&) override;
+        void Signal(unsigned sessionId, const CheckAliveData&) override;
+        void Signal(unsigned sessionId, const CommandData&) override;
+        void Reset(const NotificationData&) override;
 
         // raw XML for testing
-        void Signal(unsigned sessionId, StringView rawXml);
-        void Reset(StringView rawXml);
+        void Signal(unsigned sessionId, StringView rawXml) override;
+        void Reset(StringView rawXml) override;
 
-        void Disable(const NotificationData&);
-        void Stop();
+        void Disable(const NotificationData&) override;
+        void Stop() override;
         void Delete() override { ::DeleteHermesDownstream(m_pImpl); m_pImpl = nullptr; }
 
-        void Post(std::function<void()>&&) override {}
+        void Post(std::function<void()>&&) override;
 
     private:
         HermesDownstream* m_pImpl = nullptr;
@@ -168,7 +167,7 @@ namespace Hermes
 
     typedef std::unique_ptr<IDownstream> DownstreamPtr;
 
-    DownstreamPtr CreateHermesDownstream(uint32_t laneId, IDownstreamCallback& callback) {
+    inline DownstreamPtr CreateHermesDownstream(uint32_t laneId, IDownstreamCallback& callback) {
         return std::make_unique<Downstream>(laneId, callback);
     }
 

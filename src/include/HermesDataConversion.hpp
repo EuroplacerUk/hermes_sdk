@@ -19,6 +19,8 @@ limitations under the License.
 #include "HermesData.hpp"
 #include "HermesOptional.hpp"
 #include "HermesStringView.hpp"
+#include <memory>
+#include <utility>
 
 namespace Hermes
 {
@@ -58,6 +60,18 @@ namespace Hermes
         std::shared_ptr<void> m_adapter;
         InterfaceT& m_callbacks;
     };
+
+    inline HermesVoidCallback CppToC(std::function<void()>&& f)
+    {
+        HermesVoidCallback callback;
+        callback.m_pData = std::make_unique<std::function<void()>>(std::forward<std::function<void()>>(f)).release();
+        callback.m_pCall = [](void* pData)
+            {
+                auto upF = std::unique_ptr<std::function<void()>>(static_cast<std::function<void()>*>(pData));
+                (*upF)();
+            };
+        return callback;
+    }
 
     // check whether we got the constants right:
     static_assert(cCONFIG_PORT == cHERMES_CONFIG_PORT, "");

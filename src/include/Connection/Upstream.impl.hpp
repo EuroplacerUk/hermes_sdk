@@ -133,15 +133,9 @@ namespace Hermes
         ::EnableHermesUpstream(m_pImpl, converter.CPointer());
     }
 
-    template<class F> void Upstream::Post(F&& f)
+    void Upstream::Post(std::function<void()>&& f)
     {
-        HermesVoidCallback callback;
-        callback.m_pData = std::make_unique<F>(std::forward<F>(f)).release();
-        callback.m_pCall = [](void* pData)
-            {
-                auto upF = std::unique_ptr<F>(static_cast<F*>(pData));
-                (*upF)();
-            };
+        HermesVoidCallback callback = CppToC(std::move(f));
         ::PostHermesUpstream(m_pImpl, callback);
     }
 

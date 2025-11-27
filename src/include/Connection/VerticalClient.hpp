@@ -50,7 +50,11 @@ namespace Hermes
     };
 
     //======================= VerticalClient interface =====================================
-    class VerticalClient
+    struct IVerticalClient
+    {
+
+    };
+    class VerticalClient : public IVerticalClient
     {
     public:
         explicit VerticalClient(IVerticalClientCallback&);
