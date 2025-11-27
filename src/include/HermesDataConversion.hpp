@@ -37,7 +37,7 @@ namespace Hermes
     {
         CallbackHolder(const HermesT& callbacks) :
             m_adapter{ std::make_shared<WrapperT>(callbacks) },
-            m_callbacks{ *(WrapperT*)m_adapter.get() }
+            m_callbacks{ *m_adapter.get() }
         {
         }
 
@@ -48,16 +48,18 @@ namespace Hermes
 
         }
 
-        InterfaceT* operator->()
+        InterfaceT* operator->() const
         {
             return &m_callbacks;
         }
-        InterfaceT& operator*()
+        InterfaceT& operator*() const
         {
             return m_callbacks;
         }
+    protected:
+        WrapperT* get_raw_wrapper() const { return m_adapter.get(); }
     private:
-        std::shared_ptr<void> m_adapter;
+        std::shared_ptr<WrapperT> m_adapter;
         InterfaceT& m_callbacks;
     };
 

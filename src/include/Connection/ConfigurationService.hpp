@@ -41,8 +41,20 @@ namespace Hermes
     protected:
         virtual ~IConfigurationServiceCallback() = default;
     };
+
+    struct IConfigurationService
+    {
+        virtual void Run() = 0;
+        virtual void Post(std::function<void()>&&) = 0;
+        template<class F> void Post(F&& fn) { Post(std::function<void()>{fn}); }
+        virtual void Enable(const ConfigurationServiceSettings&) = 0;
+        virtual void Disable(const NotificationData&) = 0;
+        virtual void Stop() = 0;
+        virtual void Delete() = 0;
+    };
+
     //======================= ConfigurationService interface =====================================
-    class ConfigurationService
+    class ConfigurationService : IConfigurationService
     {
     public:
         explicit ConfigurationService(IConfigurationServiceCallback& callback);
@@ -50,12 +62,12 @@ namespace Hermes
         ConfigurationService& operator=(const ConfigurationService&) = delete;
         ~ConfigurationService() { ::DeleteHermesConfigurationService(m_pImpl); }
 
-        void Run();
-        template<class F> void Post(F&&);
-        void Enable(const ConfigurationServiceSettings&);
-        void Disable(const NotificationData&);
-        void Stop();
-
+        void Run() override;
+        void Post(std::function<void()>&&) override;
+        void Enable(const ConfigurationServiceSettings&) override;
+        void Disable(const NotificationData&) override;
+        void Stop() override;
+        void Delete() override { ::DeleteHermesConfigurationService(m_pImpl); m_pImpl = nullptr; }
     private:
         HermesConfigurationService* m_pImpl = nullptr;
         IConfigurationServiceCallback& m_callback;

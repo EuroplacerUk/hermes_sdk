@@ -31,8 +31,102 @@ limitations under the License.
 
 #include <Connection/ConfigurationService.hpp>
 
-namespace
+
+using namespace Hermes;
+using namespace Hermes::Implementation;
+
+struct ConfigurationServiceCallbackAdapter : IConfigurationServiceCallback
 {
+    ConfigurationServiceCallbackAdapter(const HermesConfigurationServiceCallbacks& callbacks) :
+        m_traceCallback(callbacks.m_traceCallback),
+        m_connectedCallback(callbacks.m_connectedCallback),
+        m_disconnectedCallback(callbacks.m_disconnectedCallback),
+        m_setConfigurationCallback(callbacks.m_setConfigurationCallback),
+        m_getConfigurationCallback(callbacks.m_getConfigurationCallback)
+    {
+
+    }
+
+    void OnConnected(unsigned sessionId, const ConnectionInfo& in_data) override 
+    { 
+        const Converter2C<ConnectionInfo> converter(in_data);
+        m_connectedCallback(sessionId, eHERMES_STATE_SOCKET_CONNECTED, converter.CPointer());
+    }
+    void OnDisconnected(unsigned sessionId, const Error& in_data) override 
+    { 
+        const Converter2C<Error> converter(in_data);
+        m_disconnectedCallback(sessionId, eHERMES_STATE_DISCONNECTED, converter.CPointer());
+    }
+
+    Error OnSetConfiguration(unsigned sessionId, const ConnectionInfo& connection, const SetConfigurationData& in_data) override
+    {
+        const Converter2C<ConnectionInfo> connectionConverter(connection);
+        const Converter2C<SetConfigurationData> dataConverter(in_data);
+
+        ResponderCapture<ISetConfigurationResponse, NotificationData> responder{ sessionId };
+        CallbackScope<ISetConfigurationResponse> scope(m_pSetConfigurationResponder, responder);
+
+        m_setConfigurationCallback(sessionId, dataConverter.CPointer(), connectionConverter.CPointer());
+
+        auto notif = responder.GetData();
+        if (notif.m_severity == ESeverity::eFATAL || notif.m_severity == ESeverity::eERROR)
+        {
+            return Error{ EErrorCode::eCLIENT_ERROR, notif.m_description };
+        }
+        return Error{};
+    }
+
+    CurrentConfigurationData OnGetConfiguration(unsigned sessionId, const ConnectionInfo& connection) override
+    {
+        const Converter2C<ConnectionInfo> connectionConverter(connection);
+        const Converter2C<GetConfigurationData> dataConverter(GetConfigurationData{});
+
+        ResponderCapture<IGetConfigurationResponse, CurrentConfigurationData> responder{ sessionId };
+
+        CallbackScope<IGetConfigurationResponse> scope(m_pGetConfigurationResponder, responder);
+        m_getConfigurationCallback(sessionId, dataConverter.CPointer(), connectionConverter.CPointer());
+        return responder.GetData();
+    }
+
+    void OnTrace(unsigned sessionId, ETraceType traceType, StringView trace) override
+    {
+        m_traceCallback(sessionId, ToC(traceType), ToC(trace));
+    }
+
+    void SignalC(uint32_t sessionId, const CurrentConfigurationData& in_data)
+    {
+        assert(m_pGetConfigurationResponder->Id() == sessionId);
+        if (!m_pGetConfigurationResponder)
+            return;
+
+        if (m_pGetConfigurationResponder->Id() != sessionId)
+            return;
+
+        m_pGetConfigurationResponder->Signal(in_data);
+    }
+
+    void SignalC(uint32_t sessionId, const NotificationData& in_data)
+    {
+        assert(m_pSetConfigurationResponder->Id() == sessionId);
+        if (!m_pSetConfigurationResponder)
+            return;
+
+        if (m_pSetConfigurationResponder->Id() != sessionId)
+            return;
+
+        m_pSetConfigurationResponder->Signal(in_data);
+    }
+
+private:
+    ApiCallback<HermesTraceCallback> m_traceCallback;
+    ApiCallback<HermesConnectedCallback> m_connectedCallback;
+    ApiCallback<HermesSetConfigurationCallback> m_setConfigurationCallback;
+    ApiCallback<HermesGetConfigurationCallback> m_getConfigurationCallback;
+    ApiCallback<HermesDisconnectedCallback> m_disconnectedCallback;
+
+    ISetConfigurationResponse* m_pSetConfigurationResponder = nullptr; // temporarily stored during the callback
+    IGetConfigurationResponse* m_pGetConfigurationResponder = nullptr; // temporarily stored during the callback
+
     template<class CallbackT>
     class CallbackScope
     {
@@ -51,36 +145,54 @@ namespace
     private:
         CallbackT*& m_pHolder;
     };
-}
 
-using namespace Hermes;
-using namespace Hermes::Implementation;
 
-struct HermesConfigurationService : IAcceptorCallback, IConfigurationServiceSessionCallback
+    template<typename Interface, typename Data>
+    struct ResponderCapture : Interface
+    {
+        ResponderCapture(uint32_t sessionId) : m_sessionId{ sessionId }
+        {
+
+        }
+        uint32_t Id() const override { return m_sessionId; }
+        void Signal(const Data& data) { m_data = data; }
+        const Data& GetData() const { return m_data; }
+    private:
+        const uint32_t m_sessionId;
+        Data m_data;
+    };
+};
+
+struct ConfigurationServiceCallbackHolder : CallbackHolder<IConfigurationServiceCallback, ConfigurationServiceCallbackAdapter, HermesConfigurationServiceCallbacks>
 {
-    Service m_service;
-    ConfigurationServiceSettings m_settings;;
+    ConfigurationServiceCallbackHolder(const HermesConfigurationServiceCallbacks& callbacks) : CallbackHolder(callbacks)
+    {
+    }
 
-    // we only hold on to the accepting session
-    std::unique_ptr<IAcceptor> m_upAcceptor{CreateAcceptor(m_service, *this)};
-    std::map<unsigned, ConfigurationServiceSession> m_sessionMap;
+    ConfigurationServiceCallbackHolder(IConfigurationServiceCallback& callbacks) : CallbackHolder(callbacks)
+    {
+    }
 
-    ApiCallback<HermesConnectedCallback> m_connectedCallback;
-    ApiCallback<HermesSetConfigurationCallback> m_setConfigurationCallback;
-    ApiCallback<HermesGetConfigurationCallback> m_getConfigurationCallback;
-    ApiCallback<HermesDisconnectedCallback> m_disconnectedCallback;
+    void SignalC(uint32_t sessionId, const CurrentConfigurationData& in_data)
+    {
+        auto* pWrapper = get_raw_wrapper();
+        if (pWrapper)
+            pWrapper->SignalC(sessionId, in_data);
+    }
 
-    ISetConfigurationResponse* m_pSetConfigurationResponder = nullptr; // temporarily stored during the callback
-    IGetConfigurationResponse* m_pGetConfigurationResponder = nullptr; // temporarily stored during the callback
+    void SignalC(uint32_t sessionId, const NotificationData& in_data)
+    {
+        auto* pWrapper = get_raw_wrapper();
+        if (pWrapper)
+            pWrapper->SignalC(sessionId, in_data);
+    }
+};
 
-    bool m_enabled{false};
-
-    HermesConfigurationService(const HermesConfigurationServiceCallbacks& callbacks) :
-        m_service(callbacks.m_traceCallback),
-        m_connectedCallback(callbacks.m_connectedCallback),
-        m_setConfigurationCallback(callbacks.m_setConfigurationCallback),
-        m_getConfigurationCallback(callbacks.m_getConfigurationCallback),
-        m_disconnectedCallback(callbacks.m_disconnectedCallback)
+struct HermesConfigurationService : IConfigurationService, IAcceptorCallback, IConfigurationServiceSessionCallback
+{
+    HermesConfigurationService(ConfigurationServiceCallbackHolder&& callback) :
+        m_service{ *callback },
+        m_callback{callback}
     {
         m_service.Inform(0U, "Created");
     }
@@ -90,8 +202,81 @@ struct HermesConfigurationService : IAcceptorCallback, IConfigurationServiceSess
         m_service.Inform(0U, "Deleted");
     }
 
+    void Run() override
+    {
+        m_service.Log(0U, "RunHermesConfigurationService");
+
+        m_service.Run();
+    }
+    void Post(std::function<void()>&& fn) override
+    {
+        m_service.Log(0U, "PostHermesConfigurationService");
+
+        m_service.Post(std::move(fn));
+    }
+    void Enable(const ConfigurationServiceSettings& in_data) override
+    {
+        m_service.Log(0U, "EnableHermesConfigurationService");
+
+        m_service.Post([this, settings = in_data]()
+        {
+            this->DoEnable(settings);
+        });
+    }
+    void Disable(const NotificationData& in_data) override
+    {
+        m_service.Log(0U, "DisableHermesConfigurationService");
+
+        m_service.Post([this, data = in_data]()
+        {
+            this->DoDisable(data);
+        });
+    }
+    void Stop() override
+    {
+        m_service.Log(0U, "StopHermesConfigurationService");
+
+        m_service.Post([this]()
+        {
+            this->DoStop();
+        });
+    }
+    void Delete() override
+    {
+        m_service.Log(0U, "DeleteHermesConfigurationService");
+
+        m_service.Stop();
+        delete this;
+    }
+
+    //C/C++ thunk API
+    void Signal(uint32_t sessionId, const CurrentConfigurationData& in_data)
+    {
+        m_service.Log(sessionId, "SignalHermesCurrentConfiguration");
+        m_callback.SignalC(sessionId, in_data);
+    }
+
+    void Signal(uint32_t sessionId, const NotificationData& in_data)
+    {
+        m_service.Log(sessionId, "SignalHermesConfigurationNotification");
+        m_callback.SignalC(sessionId, in_data);
+    }
+
+private:
+    Service m_service;
+    ConfigurationServiceSettings m_settings;;
+
+    // we only hold on to the accepting session
+    std::unique_ptr<IAcceptor> m_upAcceptor{ CreateAcceptor(m_service, *this) };
+    std::map<unsigned, ConfigurationServiceSession> m_sessionMap;
+
+    ConfigurationServiceCallbackHolder m_callback;
+
+    bool m_enabled{ false };
+
+
     //================= forwarding calls =========================
-    void Enable(const ConfigurationServiceSettings& settings)
+    void DoEnable(const ConfigurationServiceSettings& settings)
     {
         m_service.Log(0U, "Enable(", settings, "); m_enabled=", m_enabled, ", m_settings=", m_settings);
 
@@ -109,7 +294,7 @@ struct HermesConfigurationService : IAcceptorCallback, IConfigurationServiceSess
         m_upAcceptor->StartListening(networkConfiguration);
     }
 
-    void Disable(const NotificationData& data)
+    void DoDisable(const NotificationData& data)
     {
         m_service.Log(0U, "Disable(", data, "); m_enabled=", m_enabled);
 
@@ -122,7 +307,7 @@ struct HermesConfigurationService : IAcceptorCallback, IConfigurationServiceSess
             "Configuration service disabled"));
     }
 
-    void Stop()
+    void DoStop()
     {
         m_service.Log(0U, "Stop(), sessionCount=", m_sessionMap.size());
 
@@ -162,30 +347,25 @@ struct HermesConfigurationService : IAcceptorCallback, IConfigurationServiceSess
     }
 
     //================= IConfigurationServiceSessionCallback =========================
-    void OnSocketConnected(unsigned sessionId, const ConnectionInfo& data) override
-    {
-        const Converter2C<ConnectionInfo> converter(data);
-        m_connectedCallback(sessionId, eHERMES_STATE_SOCKET_CONNECTED, converter.CPointer());
-    }
+    void OnSocketConnected(unsigned sessionId, const ConnectionInfo& data) override { m_callback->OnConnected(sessionId, data); }
 
-    virtual void OnGet(unsigned sessionId, const ConnectionInfo& connectionInfo,
-        const GetConfigurationData& data, IGetConfigurationResponse& responder) override
+    virtual void OnGet(unsigned sessionId, const ConnectionInfo& connectionInfo, const GetConfigurationData& data, IGetConfigurationResponse& responder) override
     {
-        const Converter2C<ConnectionInfo> connectionConverter(connectionInfo);
-        const Converter2C<GetConfigurationData> dataConverter(data);
-
-        CallbackScope<IGetConfigurationResponse> scope(m_pGetConfigurationResponder, responder);
-        m_getConfigurationCallback(sessionId, dataConverter.CPointer(), connectionConverter.CPointer());
+        auto configuration = m_callback->OnGetConfiguration(sessionId, connectionInfo);
+        responder.Signal(configuration);
     }
 
     virtual void OnSet(unsigned sessionId, const ConnectionInfo& connectionInfo,
         const SetConfigurationData& data, ISetConfigurationResponse& responder) override
     {
-        const Converter2C<ConnectionInfo> connectionConverter(connectionInfo);
-        const Converter2C<SetConfigurationData> dataConverter(data);
+        auto error = m_callback->OnSetConfiguration(sessionId, connectionInfo, data);
 
-        CallbackScope<ISetConfigurationResponse> scope(m_pSetConfigurationResponder, responder);
-        m_setConfigurationCallback(sessionId, dataConverter.CPointer(), connectionConverter.CPointer());
+        if (!error)
+            return;
+
+        NotificationData notification(ENotificationCode::eCONFIGURATION_ERROR, ESeverity::eERROR, error.m_text);
+
+        responder.Signal(notification);
     }
 
     virtual void OnDisconnected(unsigned sessionId, const Error& error) override
@@ -194,8 +374,7 @@ struct HermesConfigurationService : IAcceptorCallback, IConfigurationServiceSess
         if (!m_sessionMap.erase(sessionId))
             return;
 
-        const Converter2C<Error> converter(error);
-        m_disconnectedCallback(sessionId, eHERMES_STATE_DISCONNECTED, converter.CPointer());
+        m_callback->OnDisconnected(sessionId, error);
     }
 };
 
@@ -206,89 +385,44 @@ HermesConfigurationService* CreateHermesConfigurationService(const HermesConfigu
 
 void RunHermesConfigurationService(HermesConfigurationService* pConfigurationService)
 {
-    pConfigurationService->m_service.Log(0U, "RunHermesConfigurationService");
-
-    pConfigurationService->m_service.Run();
+    pConfigurationService->Run();
 }
 
 void PostHermesConfigurationService(HermesConfigurationService* pConfigurationService, HermesVoidCallback voidCallback)
 {
-    pConfigurationService->m_service.Log(0U, "EnableHermesDownstream");
-
-    pConfigurationService->m_service.Post([voidCallback]
-    {
-        voidCallback.m_pCall(voidCallback.m_pData);
-    });
+    pConfigurationService->Post(CToCpp(voidCallback));
 }
 
-void EnableHermesConfigurationService(HermesConfigurationService* pConfigurationService,
-    const HermesConfigurationServiceSettings* pSettings)
+void EnableHermesConfigurationService(HermesConfigurationService* pConfigurationService, const HermesConfigurationServiceSettings* pSettings)
 {
-    pConfigurationService->m_service.Log(0U, "EnableHermesConfigurationService");
-
-    pConfigurationService->m_service.Post([pConfigurationService,
-        settings = ToCpp(*pSettings)]()
-    {
-        pConfigurationService->Enable(settings);
-    });
+    auto data = ToCpp(*pSettings);
+    pConfigurationService->Enable(data);
 }
 
-void SignalHermesCurrentConfiguration(HermesConfigurationService* pConfigurationService, uint32_t sessionId, 
-    const HermesCurrentConfigurationData* pConfiguration)
+void SignalHermesCurrentConfiguration(HermesConfigurationService* pConfigurationService, uint32_t sessionId, const HermesCurrentConfigurationData* pConfiguration)
 {
-    pConfigurationService->m_service.Log(sessionId, "SignalHermesCurrentConfiguration");
-
-    auto* pResponder = pConfigurationService->m_pGetConfigurationResponder;
-    assert(pResponder->Id() == sessionId);
-    if (!pResponder)
-        return;
-
-    if (pResponder->Id() != sessionId)
-        return;
-
-    pResponder->Signal(ToCpp(*pConfiguration));
+    auto data = ToCpp(*pConfiguration);
+    pConfigurationService->Signal(sessionId, data);
 }
 
-void SignalHermesConfigurationNotification(HermesConfigurationService* pConfigurationService, uint32_t sessionId, 
-    const HermesNotificationData* pNotification)
+void SignalHermesConfigurationNotification(HermesConfigurationService* pConfigurationService, uint32_t sessionId, const HermesNotificationData* pNotification)
 {
-    pConfigurationService->m_service.Log(sessionId, "SignalHermesConfigurationNotification");
-
-    auto* pResponder = pConfigurationService->m_pSetConfigurationResponder;
-    assert(pResponder->Id() == sessionId);
-    if (!pResponder)
-        return;
-
-    if (pResponder->Id() != sessionId)
-        return;
-
-    pResponder->Signal(ToCpp(*pNotification));
+    auto data = ToCpp(*pNotification);
+    pConfigurationService->Signal(sessionId, data);
 }
 
 void DisableHermesConfigurationService(HermesConfigurationService* pConfigurationService, const HermesNotificationData* pData)
 {
-    pConfigurationService->m_service.Log(0U, "DisableHermesConfigurationService");
-
-    pConfigurationService->m_service.Post([pConfigurationService, data = ToCpp(*pData)]()
-    {
-        pConfigurationService->Disable(data);
-    });
+    auto data = ToCpp(*pData);
+    pConfigurationService->Disable(data);
 }
 
 void StopHermesConfigurationService(HermesConfigurationService* pConfigurationService)
 {
-    pConfigurationService->m_service.Log(0U, "StopHermesConfigurationService");
-
-    pConfigurationService->m_service.Post([pConfigurationService]()
-    {
-        pConfigurationService->Stop();
-    });
+    pConfigurationService->Stop();
 }
 
 void DeleteHermesConfigurationService(HermesConfigurationService* pConfigurationService)
 {
-    pConfigurationService->m_service.Log(0U, "DeleteHermesConfigurationService");
-
-    pConfigurationService->m_service.Stop();
-    delete pConfigurationService;
+    pConfigurationService->Delete();
 }

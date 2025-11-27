@@ -78,15 +78,9 @@ namespace Hermes
         ::RunHermesConfigurationService(m_pImpl);
     }
 
-    template<class F> void ConfigurationService::Post(F&& f)
+    void ConfigurationService::Post(std::function<void()>&& f)
     {
-        HermesVoidCallback callback;
-        callback.m_pData = std::make_unique<F>(std::forward<F>(f)).release();
-        callback.m_pCall = [](void* pData)
-            {
-                auto upF = std::unique_ptr<F>(static_cast<F*>(pData));
-                (*upF)();
-            };
+        HermesVoidCallback callback = CppToC(std::move(f));
         ::PostHermesConfigurationService(m_pImpl, callback);
     }
 
