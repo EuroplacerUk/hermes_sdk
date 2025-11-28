@@ -17,7 +17,7 @@ limitations under the License.
 #pragma once
 
 #include <HermesData.hpp>
-
+#include "Network.h"
 #include <memory>
 
 namespace Hermes
@@ -28,39 +28,6 @@ namespace Hermes
     {
         namespace VerticalClient
         {
-            struct ISessionCallback;
-
-            class Session
-            {
-            public:
-                Session(unsigned id, IAsioService&, const VerticalClientSettings&);
-                Session(const Session&) = default;
-                Session& operator=(const Session&) = default;
-                Session(Session&&) = default;
-                Session& operator=(Session&&) = default;
-                ~Session();
-
-                explicit operator bool() const { return bool(m_spImpl); }
-                unsigned Id() const;
-                const Optional<SupervisoryServiceDescriptionData>& OptionalPeerServiceDescriptionData() const;
-                const ConnectionInfo& PeerConnectionInfo() const;
-
-                void Connect(ISessionCallback&);
-                void Signal(const SupervisoryServiceDescriptionData&, StringView rawXml);
-                void Signal(const SendWorkOrderInfoData&, StringView rawXml);
-                void Signal(const GetConfigurationData&, StringView rawXml);
-                void Signal(const SetConfigurationData&, StringView rawXml);
-                void Signal(const NotificationData&, StringView rawXml);
-                void Signal(const CheckAliveData&, StringView rawXml);
-                void Signal(const QueryHermesCapabilitiesData&, StringView rawXml);
-                void Disconnect();
-
-            private:
-                struct Impl;
-                std::shared_ptr<Impl> m_spImpl;
-
-            };
-
             struct ISessionCallback
             {
                 virtual void OnSocketConnected(unsigned id, EVerticalState, const ConnectionInfo&) = 0;
@@ -74,6 +41,38 @@ namespace Hermes
                 virtual void On(unsigned id, EVerticalState, const NotificationData&) = 0;
                 virtual void On(unsigned id, EVerticalState, const CheckAliveData&) = 0;
                 virtual void OnDisconnected(unsigned id, EVerticalState, const Error&) = 0;
+            };
+
+            class Session
+            {
+            public:
+                Session(unsigned id, IAsioService&, const VerticalClientSettings&, ISessionCallback&);
+                Session(const Session&) = default;
+                Session& operator=(const Session&) = default;
+                Session(Session&&) = default;
+                Session& operator=(Session&&) = default;
+                ~Session();
+
+                explicit operator bool() const { return bool(m_spImpl); }
+                unsigned Id() const;
+                const Optional<SupervisoryServiceDescriptionData>& OptionalPeerServiceDescriptionData() const;
+                const ConnectionInfo& PeerConnectionInfo() const;
+
+                void Connect();
+                void Signal(const SupervisoryServiceDescriptionData&, StringView rawXml);
+                void Signal(const SendWorkOrderInfoData&, StringView rawXml);
+                void Signal(const GetConfigurationData&, StringView rawXml);
+                void Signal(const SetConfigurationData&, StringView rawXml);
+                void Signal(const NotificationData&, StringView rawXml);
+                void Signal(const CheckAliveData&, StringView rawXml);
+                void Signal(const QueryHermesCapabilitiesData&, StringView rawXml);
+                void Disconnect();
+
+            private:
+                struct Impl;
+                std::shared_ptr<Impl> m_spImpl;
+                CallbackLifetime<ISessionCallback> m_callback;
+
             };
         }
     }

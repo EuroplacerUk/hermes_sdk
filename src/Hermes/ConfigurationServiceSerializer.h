@@ -19,6 +19,7 @@ limitations under the License.
 
 
 #include <HermesData.hpp>
+#include "Network.h"
 #include <memory>
 
 namespace Hermes
@@ -32,7 +33,7 @@ namespace Hermes
 
         struct IConfigurationServiceSerializer
         {
-            virtual void Connect(std::weak_ptr<void> wpOwner, IConfigurationServiceSerializerCallback&) = 0;
+            virtual void Connect(std::weak_ptr<void> wpOwner, CallbackReference<IConfigurationServiceSerializerCallback>&&) = 0;
             virtual void Signal(const CurrentConfigurationData&) = 0;
             virtual void Signal(const NotificationData&) = 0;
             virtual void Disconnect(const NotificationData&) = 0;

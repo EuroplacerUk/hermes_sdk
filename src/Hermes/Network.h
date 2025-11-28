@@ -34,6 +34,45 @@ namespace Hermes
     struct IDataForward;
     struct NetworkConfiguration;
 
+    template <typename TCallback>
+    struct CallbackReference;
+
+    template <typename TCallback>
+    struct CallbackLifetime
+    {
+        explicit CallbackLifetime(TCallback& callback) : m_owner{ std::shared_ptr<TCallback>{&callback, NullDeleter} } {}
+        ~CallbackLifetime() {}
+        //No copying
+        CallbackLifetime(const CallbackLifetime&) = delete;
+        CallbackLifetime& operator=(const CallbackLifetime&) = delete;
+        //Allow moving
+        CallbackLifetime(CallbackLifetime&& other) : m_owner{ std::move(other.m_owner) } {}
+        CallbackLifetime& operator=(CallbackLifetime&& other) { m_owner = std::move(other.m_owner); }
+
+        TCallback* operator ->() const { return m_owner.get(); }
+        TCallback& operator *() const { return *m_owner.get(); }
+    private:
+        static void NullDeleter(TCallback*) {}
+        std::shared_ptr<TCallback> m_owner;
+        friend struct CallbackReference<TCallback>;
+    };
+
+    template <typename TCallback>
+    struct CallbackReference
+    {
+        CallbackReference(const std::nullptr_t) : m_callback{}{}
+        CallbackReference(const CallbackLifetime<TCallback>& callback) : m_callback{callback.m_owner}{}
+
+        operator bool() const { return !m_callback.expired(); }
+
+        TCallback* get_raw() const {return m_callback.lock().get();}
+
+        TCallback* operator ->() const { return get_raw(); }
+        TCallback& operator *() const { return *get_raw(); }
+    private:
+        std::weak_ptr<TCallback> m_callback;
+    };
+
     struct ISocketCallback;
     struct ISocket
     {
@@ -41,7 +80,7 @@ namespace Hermes
         virtual const ConnectionInfo& GetConnectionInfo() const = 0;
         virtual const NetworkConfiguration& GetConfiguration() const = 0;
 
-        virtual void Connect(std::weak_ptr<void> wpOwner, ISocketCallback&) = 0;
+        virtual void Connect(std::weak_ptr<void> wpOwner, CallbackReference<ISocketCallback>&&) = 0;
         virtual void Send(StringView message) = 0;
         virtual void Close() = 0;
 

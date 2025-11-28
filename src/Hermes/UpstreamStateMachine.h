@@ -17,7 +17,7 @@ limitations under the License.
 #pragma once
 
 #include <HermesData.hpp>
-
+#include "Network.h"
 #include <memory>
 
 namespace Hermes
@@ -33,7 +33,7 @@ namespace Hermes
             struct IStateMachineCallback;
             struct IStateMachine
             {
-                virtual void Connect(std::weak_ptr<void> wpOwner, IStateMachineCallback&) = 0;
+                virtual void Connect(std::weak_ptr<void> wpOwner, CallbackReference<IStateMachineCallback>&&) = 0;
                 virtual void Signal(const ServiceDescriptionData&, StringView rawXml) = 0;
                 virtual void Signal(const MachineReadyData&, StringView rawXml) = 0;
                 virtual void Signal(const RevokeMachineReadyData&, StringView rawXml) = 0;

@@ -19,7 +19,6 @@ limitations under the License.
 
 #include "Network.h"
 #include "IService.h"
-#include "Network.h"
 #include "MessageSerialization.h"
 #include "StringBuilder.h"
 #include "HermesChrono.hpp"
@@ -52,13 +51,12 @@ namespace Hermes
     struct AsioSocket
     {
         unsigned m_sessionId;
-        std::weak_ptr<void> m_wpOwner;
+
         IAsioService& m_service;
         std::array<char, 1024> m_receivedData;
         asio::io_context& m_asioService{m_service.GetUnderlyingService()};
         asio::ip::tcp::socket m_socket{m_asioService};
         asio::system_timer m_timer{m_asioService};
-        ISocketCallback* m_pCallback{nullptr};
         NetworkConfiguration m_configuration;
         ConnectionInfo m_connectionInfo;
         bool m_closed{false};
@@ -79,6 +77,26 @@ namespace Hermes
         }
 
         std::shared_ptr<AsioSocket> shared_from_this() { return std::shared_ptr<AsioSocket>(m_wpOwner.lock(), this); }
+
+        void ConnectOwner(std::weak_ptr<void>&& wpOwner, CallbackReference<ISocketCallback>&& callback)
+        {
+            assert(!m_pCallback);
+            m_pCallback = std::move(callback);
+            m_wpOwner = wpOwner;
+        }
+
+        void OnConnected()
+        {
+            assert(m_pCallback);
+            if (!m_pCallback)
+            {
+                m_service.Alarm(m_sessionId, Hermes::EErrorCode::eIMPLEMENTATION_ERROR, "Connected, but no callback");
+                return;
+            }
+
+            m_service.Inform(m_sessionId, "OnConnected ", m_connectionInfo);
+            m_pCallback->OnConnected(m_connectionInfo);
+        }
 
         void StartReceiving()
         {
@@ -124,6 +142,8 @@ namespace Hermes
         }
 
     private:
+        std::weak_ptr<void> m_wpOwner;
+        CallbackReference<ISocketCallback> m_pCallback{ nullptr };
 
         template<class... Ts>
         void DisconnectOnError_(const boost::system::error_code& ec, const Ts&... trace)
@@ -159,7 +179,7 @@ namespace Hermes
             }
             catch (const boost::system::system_error&) {}
 
-            auto* pCallback = m_pCallback;
+            auto* pCallback = m_pCallback.get_raw();
             m_pCallback = nullptr;
             return pCallback;
         }

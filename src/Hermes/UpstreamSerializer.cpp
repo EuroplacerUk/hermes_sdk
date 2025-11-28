@@ -32,13 +32,14 @@ namespace Hermes
                 unsigned m_sessionId;
                 IAsioService& m_service;
                 IClientSocket& m_socket;
-                ISerializerCallback* m_pCallback = nullptr;
                 MessageDispatcher m_dispatcher{ m_sessionId, m_service };
 
                 Serializer(unsigned sessionId, IAsioService& service, IClientSocket& socket) :
                     m_sessionId(sessionId),
                     m_service(service),
-                    m_socket(socket)
+                    m_socket(socket),
+                    m_cbSelf{*this},
+                    m_pCallback{nullptr}
                 {
                     m_dispatcher.Add<ServiceDescriptionData>([this](const auto& data) { m_pCallback->On(data); });
                     m_dispatcher.Add<CheckAliveData>([this](const auto& data) { m_pCallback->On(data); });
@@ -75,11 +76,11 @@ namespace Hermes
                 }
 
                 //============== IUpstreamSerialization ================================
-                void Connect(std::weak_ptr<void> wpOwner, ISerializerCallback& callback) override
+                void Connect(std::weak_ptr<void> wpOwner, CallbackReference<ISerializerCallback>&& callback) override
                 {
                     assert(!m_pCallback);
-                    m_pCallback = &callback;
-                    m_socket.Connect(std::move(wpOwner), *this);
+                    m_pCallback = std::move(callback);
+                    m_socket.Connect(std::move(wpOwner), m_cbSelf);
                 }
 
                 void Signal(StringView rawXml)
@@ -91,6 +92,9 @@ namespace Hermes
                 {
                     m_socket.Close();
                 }
+            private:
+                CallbackLifetime<ISocketCallback> m_cbSelf;
+                CallbackReference<ISerializerCallback> m_pCallback;
 
             };
 

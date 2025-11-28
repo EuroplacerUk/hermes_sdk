@@ -333,9 +333,9 @@ private:
         auto sessionId = upSocket->SessionId();
         m_service.Inform(sessionId, "OnAccepted: ", upSocket->GetConnectionInfo());
 #ifdef _WINDOWS
-        auto result = m_sessionMap.try_emplace(sessionId, std::move(upSocket), m_service, m_settings);
+        auto result = m_sessionMap.try_emplace(sessionId, std::move(upSocket), m_service, m_settings, *this);
 #else
-        auto result = m_sessionMap.emplace(sessionId, ConfigurationServiceSession(std::move(upSocket), m_service, m_settings));
+        auto result = m_sessionMap.emplace(sessionId, ConfigurationServiceSession(std::move(upSocket), m_service, m_settings, *this));
 #endif
         if (!result.second)
         {
@@ -343,13 +343,13 @@ private:
             m_service.Warn(sessionId, "Duplicate session ID");
             return;
         }
-        result.first->second.Connect(*this);
+        result.first->second.Connect();
     }
 
     //================= IConfigurationServiceSessionCallback =========================
     void OnSocketConnected(unsigned sessionId, const ConnectionInfo& data) override { m_callback->OnConnected(sessionId, data); }
 
-    virtual void OnGet(unsigned sessionId, const ConnectionInfo& connectionInfo, const GetConfigurationData& data, IGetConfigurationResponse& responder) override
+    virtual void OnGet(unsigned sessionId, const ConnectionInfo& connectionInfo, const GetConfigurationData&, IGetConfigurationResponse& responder) override
     {
         auto configuration = m_callback->OnGetConfiguration(sessionId, connectionInfo);
         responder.Signal(configuration);

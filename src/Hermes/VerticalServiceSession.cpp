@@ -25,7 +25,6 @@ limitations under the License.
 #include "StringBuilder.h"
 
 #include "Network.h"
-
 #include <HermesData.hpp>
 
 namespace Hermes
@@ -35,7 +34,7 @@ namespace Hermes
     {
         namespace VerticalService
         {
-            struct Session::Impl : ISerializerCallback
+            struct Session::Impl : ISerializerCallback, std::enable_shared_from_this<Session::Impl>
             {
                 unsigned m_id;
                 EVerticalState m_state{ EVerticalState::eNOT_CONNECTED };
@@ -47,20 +46,28 @@ namespace Hermes
                 Optional<SupervisoryServiceDescriptionData> m_optionalPeerServiceDescriptionData;
                 ConnectionInfo m_peerConnectionInfo;
 
-                ISessionCallback* m_pCallback{ nullptr };
-
                 Impl(std::unique_ptr<IServerSocket>&& upSocket, IAsioService& service, const VerticalServiceSettings& configuration) :
                     m_id(upSocket->SessionId()),
                     m_service(service),
                     m_configuration(configuration),
-                    m_upSocket(std::move(upSocket))
+                    m_upSocket(std::move(upSocket)),
+                    m_cbSelf{*this},
+                    m_pCallback{nullptr}
                 {
                     m_service.Log(m_id, "VerticalServiceSession()");
+
+                    m_upSerializer = CreateSerializer(m_id, service, *m_upSocket);
                 }
 
                 ~Impl()
                 {
                     m_service.Log(m_id, "~VerticalServiceSession()");
+                }
+
+                void Connect(CallbackReference<ISessionCallback>&& callback)
+                {
+                    m_pCallback = std::move(callback);
+                    m_upSerializer->Connect(shared_from_this(), m_cbSelf);
                 }
 
                 bool DisconnectedDueToIllegalClientEvent_(StringView event)
@@ -178,23 +185,21 @@ namespace Hermes
                         m_pCallback->OnDisconnected(m_id, m_state, error);
                     }
                 }
+            private:
+                CallbackLifetime<ISerializerCallback> m_cbSelf;
+                CallbackReference<ISessionCallback> m_pCallback;
             };
 
 
-            Session::Session(std::unique_ptr<IServerSocket>&& upSocket, IAsioService& service,
-                const VerticalServiceSettings& configuration)
+            Session::Session(std::unique_ptr<IServerSocket>&& upSocket, IAsioService& service, const VerticalServiceSettings& configuration, ISessionCallback& callback)
+                : m_callback{callback}
             {
                 auto sessionId = upSocket->SessionId();
                 m_spImpl = std::make_shared<Impl>(std::move(upSocket), service, configuration);
-                m_spImpl->m_upSerializer = CreateSerializer(sessionId, service, *m_spImpl->m_upSocket);
             }
 
             Session::~Session()
             {
-                if (!m_spImpl)
-                    return;
-
-                m_spImpl->m_pCallback = nullptr;
             }
 
             unsigned Session::Id() const { return m_spImpl->m_id; }
@@ -205,10 +210,9 @@ namespace Hermes
 
             const ConnectionInfo& Session::PeerConnectionInfo() const { return m_spImpl->m_peerConnectionInfo; }
 
-            void Session::Connect(ISessionCallback& callback)
+            void Session::Connect()
             {
-                m_spImpl->m_pCallback = &callback;
-                m_spImpl->m_upSerializer->Connect(m_spImpl, *m_spImpl);
+                m_spImpl->Connect(m_callback);
             }
 
             void Session::Signal(const SupervisoryServiceDescriptionData& data)

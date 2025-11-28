@@ -37,7 +37,6 @@ namespace Hermes
                 EState m_state{ EState::eNOT_CONNECTED };
                 IAsioService& m_service;
                 ISerializer& m_forward;
-                IStateMachineCallback* m_pCallback = nullptr;
                 ECheckState m_checkState = ECheckState::eSEND_AND_RECEIVE;
                 std::string m_startTransportBoardId;
 
@@ -45,7 +44,9 @@ namespace Hermes
                     m_sessionId(sessionId),
                     m_service(service),
                     m_forward(forward),
-                    m_checkState(checkStateConsistency)
+                    m_checkState(checkStateConsistency),
+                    m_cbSelf{*this},
+                    m_pCallback{nullptr}
                 {
                 }
 
@@ -92,12 +93,12 @@ namespace Hermes
                 }
 
                 //================ Downstream::IStateMachine =================================
-                void Connect(std::weak_ptr<void> wpOwner, IStateMachineCallback& callback) override
+                void Connect(std::weak_ptr<void> wpOwner, CallbackReference<IStateMachineCallback>&& callback) override
                 {
                     assert(!m_pCallback);
                     assert(m_state == EState::eNOT_CONNECTED);
-                    m_pCallback = &callback;
-                    m_forward.Connect(std::move(wpOwner), *this);
+                    m_pCallback = std::move(callback);
+                    m_forward.Connect(std::move(wpOwner), m_cbSelf);
                 }
 
                 void Signal(const ServiceDescriptionData&, StringView rawXml) override
@@ -460,7 +461,9 @@ namespace Hermes
                         m_pCallback->OnDisconnected(m_state, error);
                     }
                 }
-
+            private:
+                CallbackLifetime<ISerializerCallback> m_cbSelf;
+                CallbackReference<IStateMachineCallback> m_pCallback;
             };
             std::unique_ptr<IStateMachine> CreateStateMachine(unsigned sessionId, IAsioService& service, ISerializer& forward, ECheckState checkStateConsistency)
             {

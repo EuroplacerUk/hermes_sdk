@@ -62,15 +62,14 @@ namespace Hermes
             return m_spSocket->m_configuration;
         }
 
-        void Connect(std::weak_ptr<void> wpOwner, ISocketCallback& callback) override
+        void Connect(std::weak_ptr<void> wpOwner, CallbackReference<ISocketCallback>&& callback) override
         {
-            m_spSocket->m_wpOwner = std::move(wpOwner);
-            m_spSocket->m_pCallback = &callback;
+            m_spSocket->ConnectOwner(std::move(wpOwner), std::move(callback));
             asio::post(m_spSocket->m_asioService, [spSocket = m_spSocket]()
             {
                 if (spSocket->Closed())
                     return;
-                spSocket->m_pCallback->OnConnected(spSocket->m_connectionInfo);
+                spSocket->OnConnected();
             });
             m_spSocket->StartReceiving();
         }

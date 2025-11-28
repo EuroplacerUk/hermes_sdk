@@ -17,7 +17,7 @@ limitations under the License.
 #pragma once
 
 #include <HermesData.hpp>
-
+#include "Network.h"
 #include <memory>
 
 namespace Hermes
@@ -28,12 +28,23 @@ namespace Hermes
     {
         namespace VerticalService
         {
-            struct ISessionCallback;
+            struct ISessionCallback
+            {
+                virtual void OnSocketConnected(unsigned id, EVerticalState, const ConnectionInfo&) = 0;
+                virtual void On(unsigned id, EVerticalState, const SupervisoryServiceDescriptionData&) = 0;
+                virtual void On(unsigned id, EVerticalState, const GetConfigurationData&) = 0;
+                virtual void On(unsigned id, EVerticalState, const SetConfigurationData&) = 0;
+                virtual void On(unsigned id, EVerticalState, const SendWorkOrderInfoData&) = 0;
+                virtual void On(unsigned id, EVerticalState, const QueryHermesCapabilitiesData&) = 0;
+                virtual void On(unsigned id, EVerticalState, const NotificationData&) = 0;
+                virtual void On(unsigned id, EVerticalState, const CheckAliveData&) = 0;
+                virtual void OnDisconnected(unsigned id, EVerticalState, const Error&) = 0;
+            };
 
             class Session
             {
             public:
-                Session(std::unique_ptr<IServerSocket>&&, IAsioService&, const VerticalServiceSettings&);
+                Session(std::unique_ptr<IServerSocket>&&, IAsioService&, const VerticalServiceSettings&, ISessionCallback&);
                 Session(const Session&) = default;
                 Session& operator=(const Session&) = default;
                 Session(Session&&) = default;
@@ -45,7 +56,7 @@ namespace Hermes
                 const Optional<SupervisoryServiceDescriptionData>& OptionalPeerServiceDescriptionData() const;
                 const ConnectionInfo& PeerConnectionInfo() const;
 
-                void Connect(ISessionCallback&);
+                void Connect();
                 void Signal(const SupervisoryServiceDescriptionData&);
                 void Signal(const BoardArrivedData&);
                 void Signal(const BoardDepartedData&);
@@ -60,22 +71,8 @@ namespace Hermes
             private:
                 struct Impl;
                 std::shared_ptr<Impl> m_spImpl;
-
+                CallbackLifetime<ISessionCallback> m_callback;
             };
-
-            struct ISessionCallback
-            {
-                virtual void OnSocketConnected(unsigned id, EVerticalState, const ConnectionInfo&) = 0;
-                virtual void On(unsigned id, EVerticalState, const SupervisoryServiceDescriptionData&) = 0;
-                virtual void On(unsigned id, EVerticalState, const GetConfigurationData&) = 0;
-                virtual void On(unsigned id, EVerticalState, const SetConfigurationData&) = 0;
-                virtual void On(unsigned id, EVerticalState, const SendWorkOrderInfoData&) = 0;
-                virtual void On(unsigned id, EVerticalState, const QueryHermesCapabilitiesData&) = 0;
-                virtual void On(unsigned id, EVerticalState, const NotificationData&) = 0;
-                virtual void On(unsigned id, EVerticalState, const CheckAliveData&) = 0;
-                virtual void OnDisconnected(unsigned id, EVerticalState, const Error&) = 0;
-            };
-
 
         }
     }

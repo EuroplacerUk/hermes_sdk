@@ -341,8 +341,8 @@ private:
             return;
         }
 
-        m_upSession = std::make_unique<Session>(std::move(upSocket), m_service, m_settings);
-        m_upSession->Connect(*this);
+        m_upSession = std::make_unique<Session>(std::move(upSocket), m_service, m_settings, *this);
+        m_upSession->Connect();
     }
 
     //================= ISessionCallback =========================

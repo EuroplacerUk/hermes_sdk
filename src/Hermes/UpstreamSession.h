@@ -17,7 +17,7 @@ limitations under the License.
 #pragma once
 
 #include <HermesData.hpp>
-
+#include "Network.h"
 #include <memory>
 
 namespace Hermes
@@ -29,40 +29,6 @@ namespace Hermes
 
         namespace Upstream
         {
-            struct ISessionCallback;
-            class Session
-            {
-            public:
-                Session(unsigned id, IAsioService&, const UpstreamSettings&);
-                Session(const Session&) = default;
-                Session& operator=(const Session&) = default;
-                Session(Session&&) = default;
-                Session& operator=(Session&&) = default;
-                ~Session();
-
-                explicit operator bool() const { return bool(m_spImpl); }
-                unsigned Id() const;
-                const Optional<ServiceDescriptionData>& OptionalPeerServiceDescriptionData() const;
-                const ConnectionInfo& PeerConnectionInfo() const;
-
-                void Connect(ISessionCallback&);
-                void Signal(const ServiceDescriptionData&, StringView rawXml);
-                void Signal(const MachineReadyData&, StringView rawXml);
-                void Signal(const RevokeMachineReadyData&, StringView rawXml);
-                void Signal(const StartTransportData&, StringView rawXml);
-                void Signal(const StopTransportData&, StringView rawXml);
-                void Signal(const QueryBoardInfoData&, StringView rawXml);
-                void Signal(const NotificationData&, StringView rawXml);
-                void Signal(const CommandData&, StringView rawXml);
-                void Signal(const CheckAliveData&, StringView rawXml);
-                void Disconnect();
-
-            private:
-                struct Impl;
-                std::shared_ptr<Impl> m_spImpl;
-
-            };
-
             struct ISessionCallback
             {
                 virtual void OnSocketConnected(unsigned id, EState, const ConnectionInfo&) = 0;
@@ -78,6 +44,41 @@ namespace Hermes
                 virtual void OnState(unsigned id, EState) = 0;
                 virtual void OnDisconnected(unsigned id, EState, const Error&) = 0;
             };
+
+            class Session
+            {
+            public:
+                Session(unsigned id, IAsioService&, const UpstreamSettings&, ISessionCallback&);
+                Session(const Session&) = default;
+                Session& operator=(const Session&) = default;
+                Session(Session&&) = default;
+                Session& operator=(Session&&) = default;
+                ~Session();
+
+                explicit operator bool() const { return bool(m_spImpl); }
+                unsigned Id() const;
+                const Optional<ServiceDescriptionData>& OptionalPeerServiceDescriptionData() const;
+                const ConnectionInfo& PeerConnectionInfo() const;
+
+                void Connect();
+                void Signal(const ServiceDescriptionData&, StringView rawXml);
+                void Signal(const MachineReadyData&, StringView rawXml);
+                void Signal(const RevokeMachineReadyData&, StringView rawXml);
+                void Signal(const StartTransportData&, StringView rawXml);
+                void Signal(const StopTransportData&, StringView rawXml);
+                void Signal(const QueryBoardInfoData&, StringView rawXml);
+                void Signal(const NotificationData&, StringView rawXml);
+                void Signal(const CommandData&, StringView rawXml);
+                void Signal(const CheckAliveData&, StringView rawXml);
+                void Disconnect();
+
+            private:
+                struct Impl;
+                std::shared_ptr<Impl> m_spImpl;
+                CallbackLifetime<ISessionCallback> m_callback;
+            };
+
+
 
 
         }

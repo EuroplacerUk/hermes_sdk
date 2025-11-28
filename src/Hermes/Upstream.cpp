@@ -506,21 +506,27 @@ private:
 
         if (!++m_sessionId) { ++m_sessionId; } // avoid zero sessionId
 
-        m_upSession = std::make_unique<Session>(m_sessionId, m_service, m_settings);
-        m_upSession->Connect(*this);
+        m_upSession = std::make_unique<Session>(m_sessionId, m_service, m_settings, *this);
+        m_upSession->Connect();
+    }
+
+    asio::awaitable<void> DoDelayCreateNewSession(double delay)
+    {
+        m_service.Log(0U, "DelayCreateNewSession_");
+
+        try {
+            m_timer.expires_after(Hermes::GetSeconds(delay));
+            co_await m_timer.async_wait();
+        }
+        catch (const boost::system::system_error&) {
+            co_return;
+        }
+        CreateNewSession_();
     }
 
     void DelayCreateNewSession_(double delay)
     {
-        m_service.Log(0U, "DelayCreateNewSession_");
-
-        m_timer.expires_after(Hermes::GetSeconds(delay));
-        m_timer.async_wait([this](const boost::system::error_code& ec)
-        {
-            if (ec) // timer cancelled or whatever
-                return;
-            CreateNewSession_();
-        });
+        asio::co_spawn(m_service.GetUnderlyingService(), DoDelayCreateNewSession(delay), asio::detached);
     }
 };
 

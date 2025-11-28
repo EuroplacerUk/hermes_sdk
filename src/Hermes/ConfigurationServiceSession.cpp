@@ -41,19 +41,27 @@ namespace Hermes
             std::unique_ptr<IConfigurationServiceSerializer> m_upSerializer;
             ConnectionInfo m_peerConnectionInfo;
 
-            IConfigurationServiceSessionCallback* m_pCallback = nullptr;
-
             Impl(std::unique_ptr<IServerSocket>&& upSocket, IAsioService& service) :
                 m_id(upSocket->SessionId()),
                 m_service(service),
-                m_upSocket(std::move(upSocket))
+                m_upSocket(std::move(upSocket)),
+                m_pCallback{ nullptr },
+                m_cbSelf {*this}
             {
                 m_service.Log(m_id, "ConfigurationServiceSession()");
+
+                m_upSerializer = CreateConfigurationServiceSerializer(m_id, service, *m_upSocket);
             }
 
             ~Impl()
             {
                 m_service.Log(m_id, "~ConfigurationServiceSession()");
+            }
+
+            void Connect(CallbackReference<IConfigurationServiceSessionCallback>&& callback)
+            {
+                m_pCallback = std::move(callback);
+                m_upSerializer->Connect(shared_from_this(), m_cbSelf);
             }
 
             //============= implementation of IConfigurationSessionSerializerCallback ============
@@ -86,7 +94,7 @@ namespace Hermes
                 if (!m_pCallback)
                     return;
 
-                auto* pCallback = m_pCallback;
+                auto* pCallback = m_pCallback.get_raw();
                 m_pCallback = nullptr;
                 pCallback->OnDisconnected(m_id, data);
             }
@@ -104,33 +112,30 @@ namespace Hermes
             }
 
             unsigned Id() const override { return m_id; }
+        private:
+            CallbackLifetime<IConfigurationServiceSerializerCallback> m_cbSelf;
+            CallbackReference<IConfigurationServiceSessionCallback> m_pCallback;
         };
 
 
         ConfigurationServiceSession::ConfigurationServiceSession(std::unique_ptr<IServerSocket>&& upSocket, IAsioService& service,
-            const ConfigurationServiceSettings&)
+            const ConfigurationServiceSettings&, IConfigurationServiceSessionCallback& callback) :
+            m_callback{callback}
         {
-            auto id = upSocket->SessionId();
             m_spImpl = std::make_shared<Impl>(std::move(upSocket), service);
-            m_spImpl->m_upSerializer = CreateConfigurationServiceSerializer(id, service, *m_spImpl->m_upSocket);
         }
 
         ConfigurationServiceSession::~ConfigurationServiceSession()
         {
-            if (!m_spImpl)
-                return;
-
-            m_spImpl->m_pCallback = nullptr;
         }
 
         unsigned ConfigurationServiceSession::Id() const { return m_spImpl->m_id; }
         const ConnectionInfo& ConfigurationServiceSession::PeerConnectionInfo() const { return m_spImpl->m_peerConnectionInfo; }
 
 
-        void ConfigurationServiceSession::Connect(IConfigurationServiceSessionCallback& callback)
+        void ConfigurationServiceSession::Connect()
         {
-            m_spImpl->m_pCallback = &callback;
-            m_spImpl->m_upSerializer->Connect(m_spImpl, *m_spImpl);
+            m_spImpl->Connect(m_callback);
         }
 
         void ConfigurationServiceSession::Disconnect(const NotificationData& data) { m_spImpl->m_upSerializer->Disconnect(data); }

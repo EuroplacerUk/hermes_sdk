@@ -30,7 +30,7 @@ namespace Hermes
             unsigned m_sessionId;
             IAsioService& m_service;
             IServerSocket& m_socket;
-            IConfigurationServiceSerializerCallback* m_pCallback = nullptr;
+
             MessageDispatcher m_dispatcher{ m_sessionId, m_service };
             bool m_connected = false;
 
@@ -38,7 +38,9 @@ namespace Hermes
                 IServerSocket& socket) :
                 m_sessionId(sessionId),
                 m_service(service),
-                m_socket(socket)
+                m_socket(socket),
+                m_pCallback{ nullptr },
+                m_owner{ *this }
             {
                 m_dispatcher.Add<GetConfigurationData>([this](const auto& data) { m_pCallback->On(data); });
                 m_dispatcher.Add<SetConfigurationData>([this](const auto& data) { m_pCallback->On(data); });
@@ -69,11 +71,11 @@ namespace Hermes
             }
 
             //============== IConfigurationServiceSerializer ================================
-            void Connect(std::weak_ptr<void> wpOwner, IConfigurationServiceSerializerCallback& callback) override
+            void Connect(std::weak_ptr<void> wpOwner, CallbackReference<IConfigurationServiceSerializerCallback>&& callback) override
             {
                 assert(!m_pCallback);
-                m_pCallback = &callback;
-                m_socket.Connect(std::move(wpOwner), *this);
+                m_pCallback = std::move(callback);
+                m_socket.Connect(std::move(wpOwner), m_owner);
             }
 
             void Signal(const CurrentConfigurationData& data) override
@@ -100,6 +102,9 @@ namespace Hermes
                 m_socket.Close();
             }
 
+        private:
+            CallbackReference<IConfigurationServiceSerializerCallback> m_pCallback;
+            CallbackLifetime<ISocketCallback> m_owner;
         };
 
         std::unique_ptr<IConfigurationServiceSerializer> CreateConfigurationServiceSerializer(unsigned sessionId,

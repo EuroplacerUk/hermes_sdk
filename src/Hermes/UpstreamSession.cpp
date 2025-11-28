@@ -36,29 +36,42 @@ namespace Hermes
         {
             struct Session::Impl : IStateMachineCallback, std::enable_shared_from_this<Impl>
             {
-                unsigned m_id;
-                IAsioService& m_service;
-                UpstreamSettings m_configuration;
-
-                std::unique_ptr<IClientSocket> m_upSocket;
-                std::unique_ptr<ISerializer> m_upSerializer;
-                std::unique_ptr<IStateMachine> m_upStateMachine;
-                Optional<ServiceDescriptionData> m_optionalPeerServiceDescriptionData;
-                ConnectionInfo m_peerConnectionInfo;
-
-                ISessionCallback* m_pCallback{ nullptr };
-
                 Impl(unsigned id, IAsioService& service, const UpstreamSettings& configuration) :
                     m_id(id),
                     m_service(service),
-                    m_configuration(configuration)
+                    m_configuration(configuration),
+                    m_cbSelf{*this},
+                    m_pCallback{nullptr}
                 {
                     m_service.Log(m_id, "UpstreamSession()");
+
+
+                    NetworkConfiguration socketConfig;
+                    socketConfig.m_hostName = configuration.m_hostAddress;
+                    socketConfig.m_port = configuration.m_port;
+                    socketConfig.m_retryDelayInSeconds = configuration.m_reconnectWaitTimeInSeconds;
+                    socketConfig.m_checkAlivePeriodInSeconds = configuration.m_checkAlivePeriodInSeconds;
+
+                    m_upSocket = CreateClientSocket(id, socketConfig, service);
+                    m_upSerializer = CreateSerializer(id, service, *m_upSocket);
+                    m_upStateMachine = CreateStateMachine(id, service, *m_upSerializer, configuration.m_checkState);
                 }
 
                 ~Impl()
                 {
                     m_service.Log(m_id, "~UpstreamSession()");
+                }
+
+                void Connect(CallbackReference<ISessionCallback>&& callback)
+                {
+                    m_pCallback = std::move(callback);
+                    m_upStateMachine->Connect(shared_from_this(), m_cbSelf);
+
+                }
+                void Disconnect()
+                {
+                    m_pCallback = nullptr;
+                    m_upStateMachine->Disconnect();
                 }
 
                 //============= implementation of ICallback ============
@@ -111,43 +124,47 @@ namespace Hermes
                     if (!m_pCallback)
                         return;
 
-                    auto* pCallback = m_pCallback;
+                    auto* pCallback = m_pCallback.get_raw();
                     m_pCallback = nullptr;
                     pCallback->OnDisconnected(m_id, state, data);
                 }
+
+                unsigned Id() const { return m_id; }
+                const Optional<ServiceDescriptionData>& OptionalPeerServiceDescriptionData() const { return m_optionalPeerServiceDescriptionData; }
+                const ConnectionInfo& PeerConnectionInfo() const { return m_peerConnectionInfo; }
+
+            private:
+                unsigned m_id;
+                IAsioService& m_service;
+                UpstreamSettings m_configuration;
+
+                std::unique_ptr<IClientSocket> m_upSocket;
+                std::unique_ptr<ISerializer> m_upSerializer;
+                std::unique_ptr<IStateMachine> m_upStateMachine;
+                Optional<ServiceDescriptionData> m_optionalPeerServiceDescriptionData;
+                ConnectionInfo m_peerConnectionInfo;
+
+                CallbackLifetime<IStateMachineCallback> m_cbSelf;
+                CallbackReference<ISessionCallback> m_pCallback;
             };
 
-            Session::Session(unsigned id, IAsioService& service, const UpstreamSettings& configuration)
+            Session::Session(unsigned id, IAsioService& service, const UpstreamSettings& configuration, ISessionCallback& callback) :
+                m_callback{callback}
             {
                 m_spImpl = std::make_shared<Impl>(id, service, configuration);
-
-                NetworkConfiguration socketConfig;
-                socketConfig.m_hostName = configuration.m_hostAddress;
-                socketConfig.m_port = configuration.m_port;
-                socketConfig.m_retryDelayInSeconds = configuration.m_reconnectWaitTimeInSeconds;
-                socketConfig.m_checkAlivePeriodInSeconds = configuration.m_checkAlivePeriodInSeconds;
-
-                m_spImpl->m_upSocket = CreateClientSocket(id, socketConfig, service);
-                m_spImpl->m_upSerializer = CreateSerializer(id, service, *m_spImpl->m_upSocket);
-                m_spImpl->m_upStateMachine = CreateStateMachine(id, service, *m_spImpl->m_upSerializer, configuration.m_checkState);
             }
 
             Session::~Session()
             {
-                if (!m_spImpl)
-                    return;
-
-                m_spImpl->m_pCallback = nullptr;
             }
 
-            unsigned Session::Id() const { return m_spImpl->m_id; }
-            const Optional<ServiceDescriptionData>& Session::OptionalPeerServiceDescriptionData() const { return m_spImpl->m_optionalPeerServiceDescriptionData; }
-            const ConnectionInfo& Session::PeerConnectionInfo() const { return m_spImpl->m_peerConnectionInfo; }
+            unsigned Session::Id() const { return m_spImpl->Id(); }
+            const Optional<ServiceDescriptionData>& Session::OptionalPeerServiceDescriptionData() const { return m_spImpl->OptionalPeerServiceDescriptionData(); }
+            const ConnectionInfo& Session::PeerConnectionInfo() const { return m_spImpl->PeerConnectionInfo(); }
 
-            void Session::Connect(ISessionCallback& callback)
+            void Session::Connect()
             {
-                m_spImpl->m_pCallback = &callback;
-                m_spImpl->m_upStateMachine->Connect(m_spImpl, *m_spImpl);
+                m_spImpl->Connect(m_callback);
             }
 
             void Session::Signal(const ServiceDescriptionData& data, StringView rawXml) { m_spImpl->Signal_(data, rawXml); }
@@ -162,8 +179,7 @@ namespace Hermes
 
             void Session::Disconnect()
             {
-                m_spImpl->m_pCallback = nullptr;
-                m_spImpl->m_upStateMachine->Disconnect();
+                m_spImpl->Disconnect();
             }
         }
     }

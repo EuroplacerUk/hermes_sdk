@@ -37,7 +37,7 @@ namespace Hermes
 
         namespace VerticalClient
         {
-            struct Session::Impl : ISerializerCallback
+            struct Session::Impl : ISerializerCallback, std::enable_shared_from_this<Session::Impl>
             {
                 unsigned m_id;
                 EVerticalState m_state{ EVerticalState::eNOT_CONNECTED };
@@ -49,19 +49,35 @@ namespace Hermes
                 Optional<SupervisoryServiceDescriptionData> m_optionalPeerServiceDescriptionData;
                 ConnectionInfo m_peerConnectionInfo;
 
-                ISessionCallback* m_pCallback{ nullptr };
-
                 Impl(unsigned id, IAsioService& service, const VerticalClientSettings& configuration) :
                     m_id(id),
                     m_service(service),
-                    m_configuration(configuration)
+                    m_configuration(configuration),
+                    m_cbSelf{*this},
+                    m_pCallback{nullptr}
+
                 {
                     m_service.Log(m_id, "VerticalClientSession()");
+
+                    NetworkConfiguration socketConfig;
+                    socketConfig.m_hostName = configuration.m_hostAddress;
+                    socketConfig.m_port = configuration.m_port;
+                    socketConfig.m_retryDelayInSeconds = configuration.m_reconnectWaitTimeInSeconds;
+                    socketConfig.m_checkAlivePeriodInSeconds = configuration.m_checkAlivePeriodInSeconds;
+
+                    m_upSocket = CreateClientSocket(id, socketConfig, service);
+                    m_upSerializer = CreateSerializer(id, service, *m_upSocket);
                 }
 
                 ~Impl()
                 {
                     m_service.Log(m_id, "~VerticalClientSession()");
+                }
+
+                void Connect(CallbackReference<ISessionCallback>&& callback)
+                {
+                    m_pCallback = std::move(callback);
+                    m_upSerializer->Connect(shared_from_this(), m_cbSelf);
                 }
 
                 bool DisconnectedDueToIllegalClientEvent_(StringView event)
@@ -182,30 +198,21 @@ namespace Hermes
                         m_pCallback->OnDisconnected(m_id, m_state, error);
                     }
                 }
+
+                private:
+                    CallbackLifetime<ISerializerCallback> m_cbSelf;
+                    CallbackReference<ISessionCallback> m_pCallback;
             };
 
 
-            Session::Session(unsigned id, IAsioService& service,
-                const VerticalClientSettings& configuration)
+            Session::Session(unsigned id, IAsioService& service, const VerticalClientSettings& configuration, ISessionCallback& callback) :
+                m_callback{callback}
             {
                 m_spImpl = std::make_shared<Impl>(id, service, configuration);
-
-                NetworkConfiguration socketConfig;
-                socketConfig.m_hostName = configuration.m_hostAddress;
-                socketConfig.m_port = configuration.m_port;
-                socketConfig.m_retryDelayInSeconds = configuration.m_reconnectWaitTimeInSeconds;
-                socketConfig.m_checkAlivePeriodInSeconds = configuration.m_checkAlivePeriodInSeconds;
-
-                m_spImpl->m_upSocket = CreateClientSocket(id, socketConfig, service);
-                m_spImpl->m_upSerializer = CreateSerializer(id, service, *m_spImpl->m_upSocket);
             }
 
             Session::~Session()
             {
-                if (!m_spImpl)
-                    return;
-
-                m_spImpl->m_pCallback = nullptr;
             }
 
             unsigned Session::Id() const { return m_spImpl->m_id; }
@@ -216,10 +223,9 @@ namespace Hermes
 
             const ConnectionInfo& Session::PeerConnectionInfo() const { return m_spImpl->m_peerConnectionInfo; }
 
-            void Session::Connect(ISessionCallback& callback)
+            void Session::Connect()
             {
-                m_spImpl->m_pCallback = &callback;
-                m_spImpl->m_upSerializer->Connect(m_spImpl, *m_spImpl);
+                m_spImpl->Connect(m_callback);
             }
 
             void Session::Signal(const SupervisoryServiceDescriptionData&, StringView rawXml)

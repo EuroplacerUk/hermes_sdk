@@ -60,11 +60,9 @@ namespace Hermes
             return m_socket.m_configuration;
         }
         
-        void Connect(std::weak_ptr<void> wpOwner, ISocketCallback& callback) override
+        void Connect(std::weak_ptr<void> wpOwner, CallbackReference<ISocketCallback>&& callback) override
         {
-            assert(!m_socket.m_pCallback);
-            m_socket.m_wpOwner = wpOwner;
-            m_socket.m_pCallback = &callback;
+            m_socket.ConnectOwner(std::move(wpOwner), std::move(callback));
             AsyncConnect_();
         }
 
@@ -83,7 +81,7 @@ namespace Hermes
 
         std::shared_ptr<ClientSocket> shared_from_this()
         {
-            return std::shared_ptr<ClientSocket>(m_socket.m_wpOwner.lock(), this);
+            return std::shared_ptr<ClientSocket>(m_socket.shared_from_this(), this);
         }
 
         void AsyncConnect_()
@@ -136,16 +134,7 @@ namespace Hermes
                 return;
             }
 
-            assert(m_socket.m_pCallback);
-            if (!m_socket.m_pCallback)
-            {
-                m_socket.m_service.Alarm(m_socket.m_sessionId, Hermes::EErrorCode::eIMPLEMENTATION_ERROR, 
-                    "Connected, but no callback");
-                return;
-            }
-
-            m_socket.m_service.Inform(m_socket.m_sessionId, "OnConnected ", m_socket.m_connectionInfo);
-            m_socket.m_pCallback->OnConnected(m_socket.m_connectionInfo);
+            m_socket.OnConnected();
             m_socket.StartReceiving();
         }
 

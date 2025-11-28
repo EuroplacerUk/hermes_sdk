@@ -503,8 +503,8 @@ private:
 
         if (!++m_sessionId) { ++m_sessionId; } // avoid zero sessionId
 
-        m_upSession = std::make_unique<Session>(m_sessionId, m_service, m_settings);
-        m_upSession->Connect(*this);
+        m_upSession = std::make_unique<Session>(m_sessionId, m_service, m_settings, *this);
+        m_upSession->Connect();
     }
 
     void DelayCreateNewSession_(double delay)
