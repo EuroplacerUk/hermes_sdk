@@ -194,7 +194,6 @@ namespace Hermes
             Session::Session(std::unique_ptr<IServerSocket>&& upSocket, IAsioService& service, const VerticalServiceSettings& configuration, ISessionCallback& callback)
                 : m_callback{callback}
             {
-                auto sessionId = upSocket->SessionId();
                 m_spImpl = std::make_shared<Impl>(std::move(upSocket), service, configuration);
             }
 

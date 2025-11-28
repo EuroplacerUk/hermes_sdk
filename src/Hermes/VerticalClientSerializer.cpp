@@ -34,28 +34,28 @@ namespace Hermes
                 IClientSocket& m_socket;
                 MessageDispatcher m_dispatcher{ m_sessionId, m_service };
 
-                Serializer(unsigned sessionId, IAsioService& service, IClientSocket& socket) :
+                Serializer(unsigned sessionId, IAsioService& service, IClientSocket& socket, ISerializerCallback& callback) :
                     m_sessionId(sessionId),
                     m_service(service),
                     m_socket(socket),
                     m_cbSelf{*this},
-                    m_pCallback{nullptr}
+                    m_callback{callback}
                 {
-                    m_dispatcher.Add<SupervisoryServiceDescriptionData>([this](const auto& data) { m_pCallback->On(data); });
-                    m_dispatcher.Add<CheckAliveData>([this](const auto& data) { m_pCallback->On(data); });
-                    m_dispatcher.Add<NotificationData>([this](const auto& data) { m_pCallback->On(data); });
-                    m_dispatcher.Add<CurrentConfigurationData>([this](const auto& data) { m_pCallback->On(data); });
-                    m_dispatcher.Add<BoardArrivedData>([this](const auto& data) { m_pCallback->On(data); });
-                    m_dispatcher.Add<BoardDepartedData>([this](const auto& data) { m_pCallback->On(data); });
-                    m_dispatcher.Add<QueryWorkOrderInfoData>([this](const auto& data) { m_pCallback->On(data); });
-                    m_dispatcher.Add<ReplyWorkOrderInfoData>([this](const auto& data) { m_pCallback->On(data); });
-                    m_dispatcher.Add<SendHermesCapabilitiesData>([this](const auto& data) { m_pCallback->On(data); });
+                    m_dispatcher.Add<SupervisoryServiceDescriptionData>([this](const auto& data) { m_callback.On(data); });
+                    m_dispatcher.Add<CheckAliveData>([this](const auto& data) { m_callback.On(data); });
+                    m_dispatcher.Add<NotificationData>([this](const auto& data) { m_callback.On(data); });
+                    m_dispatcher.Add<CurrentConfigurationData>([this](const auto& data) { m_callback.On(data); });
+                    m_dispatcher.Add<BoardArrivedData>([this](const auto& data) { m_callback.On(data); });
+                    m_dispatcher.Add<BoardDepartedData>([this](const auto& data) { m_callback.On(data); });
+                    m_dispatcher.Add<QueryWorkOrderInfoData>([this](const auto& data) { m_callback.On(data); });
+                    m_dispatcher.Add<ReplyWorkOrderInfoData>([this](const auto& data) { m_callback.On(data); });
+                    m_dispatcher.Add<SendHermesCapabilitiesData>([this](const auto& data) { m_callback.On(data); });
                 }
 
                 // ISocketCallback
                 void OnConnected(const ConnectionInfo& connectionInfo) override
                 {
-                    m_pCallback->OnSocketConnected(connectionInfo);
+                    m_callback.OnSocketConnected(connectionInfo);
                 }
 
                 void OnReceived(StringSpan xmlData) override
@@ -67,20 +67,18 @@ namespace Hermes
                     error = m_service.Alarm(m_sessionId, EErrorCode::ePEER_ERROR, error.m_text);
                     Signal(Serialize(NotificationData(ENotificationCode::ePROTOCOL_ERROR, ESeverity::eFATAL, error.m_text)));
                     m_socket.Close();
-                    m_pCallback->OnDisconnected(error);
+                    m_callback.OnDisconnected(error);
                 }
 
                 void OnDisconnected(const Error& error) override
                 {
-                    m_pCallback->OnDisconnected(error);
+                    m_callback.OnDisconnected(error);
                 }
 
 
                 //============== VerticalService::ISerializer ================================
-                void Connect(std::weak_ptr<void> wpOwner, CallbackReference<ISerializerCallback>&& callback) override
+                void Connect(std::weak_ptr<void> wpOwner) override
                 {
-                    assert(m_pCallback);
-                    m_pCallback = std::move(callback);
                     m_socket.Connect(wpOwner, m_cbSelf);
                 }
 
@@ -95,14 +93,13 @@ namespace Hermes
                 }
             private:
                 CallbackLifetime<ISocketCallback> m_cbSelf;
-                CallbackReference<ISerializerCallback> m_pCallback;
+                ISerializerCallback& m_callback;
             };
         }
 
-        std::unique_ptr<VerticalClient::ISerializer> VerticalClient::CreateSerializer(unsigned sessionId, IAsioService& service,
-            IClientSocket& socket)
+        std::unique_ptr<VerticalClient::ISerializer> VerticalClient::CreateSerializer(unsigned sessionId, IAsioService& service, IClientSocket& socket, ISerializerCallback& callback)
         {
-            return std::make_unique<VerticalClient::Serializer>(sessionId, service, socket);
+            return std::make_unique<VerticalClient::Serializer>(sessionId, service, socket, callback);
         }
     }
 }

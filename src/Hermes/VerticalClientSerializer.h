@@ -34,7 +34,7 @@ namespace Hermes
 
             struct ISerializer
             {
-                virtual void Connect(std::weak_ptr<void> wpOwner, CallbackReference<ISerializerCallback>&&) = 0;
+                virtual void Connect(std::weak_ptr<void> wpOwner) = 0;
                 virtual void Signal(StringView rawXml) = 0;
                 virtual void Disconnect() = 0;
 
@@ -59,8 +59,7 @@ namespace Hermes
                 ~ISerializerCallback() = default;
             };
 
-            std::unique_ptr<ISerializer> CreateSerializer(unsigned sessionId,
-                IAsioService&, IClientSocket&);
+            std::unique_ptr<ISerializer> CreateSerializer(unsigned sessionId, IAsioService&, IClientSocket&, ISerializerCallback&);
         }
     }
 }

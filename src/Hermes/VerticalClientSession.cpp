@@ -39,21 +39,10 @@ namespace Hermes
         {
             struct Session::Impl : ISerializerCallback, std::enable_shared_from_this<Session::Impl>
             {
-                unsigned m_id;
-                EVerticalState m_state{ EVerticalState::eNOT_CONNECTED };
-                IAsioService& m_service;
-                VerticalClientSettings m_configuration;
-
-                std::unique_ptr<IClientSocket> m_upSocket;
-                std::unique_ptr<ISerializer> m_upSerializer;
-                Optional<SupervisoryServiceDescriptionData> m_optionalPeerServiceDescriptionData;
-                ConnectionInfo m_peerConnectionInfo;
-
                 Impl(unsigned id, IAsioService& service, const VerticalClientSettings& configuration) :
                     m_id(id),
                     m_service(service),
                     m_configuration(configuration),
-                    m_cbSelf{*this},
                     m_pCallback{nullptr}
 
                 {
@@ -66,7 +55,7 @@ namespace Hermes
                     socketConfig.m_checkAlivePeriodInSeconds = configuration.m_checkAlivePeriodInSeconds;
 
                     m_upSocket = CreateClientSocket(id, socketConfig, service);
-                    m_upSerializer = CreateSerializer(id, service, *m_upSocket);
+                    m_upSerializer = CreateSerializer(id, service, *m_upSocket, *this);
                 }
 
                 ~Impl()
@@ -77,7 +66,34 @@ namespace Hermes
                 void Connect(CallbackReference<ISessionCallback>&& callback)
                 {
                     m_pCallback = std::move(callback);
-                    m_upSerializer->Connect(shared_from_this(), m_cbSelf);
+                    m_upSerializer->Connect(shared_from_this());
+                }
+                void Disconnect()
+                {
+                    switch (m_state)
+                    {
+                    case EVerticalState::eDISCONNECTED:
+                        return;
+                    default:
+                        m_state = EVerticalState::eDISCONNECTED;
+                        m_upSerializer->Disconnect();
+                    }
+                }
+
+                void Signal(const SupervisoryServiceDescriptionData&, StringView rawXml)
+                {
+                    switch (m_state)
+                    {
+                    case EVerticalState::eSOCKET_CONNECTED:
+                        m_state = EVerticalState::eSUPERVISORY_SERVICE_DESCRIPTION;
+                        m_upSerializer->Signal(rawXml);
+                        return;
+
+                    default:
+                        if (DisconnectedDueToIllegalClientEvent_("ServiceDescription"))
+                            return;
+                        m_upSerializer->Signal(rawXml);
+                    }
                 }
 
                 bool DisconnectedDueToIllegalClientEvent_(StringView event)
@@ -199,8 +215,21 @@ namespace Hermes
                     }
                 }
 
+                unsigned Id() const { return m_id; }
+                const Optional<SupervisoryServiceDescriptionData>& OptionalPeerServiceDescriptionData() const { return m_optionalPeerServiceDescriptionData; }
+                const ConnectionInfo& PeerConnectionInfo() const { return m_peerConnectionInfo; }
+
                 private:
-                    CallbackLifetime<ISerializerCallback> m_cbSelf;
+                    unsigned m_id;
+                    EVerticalState m_state{ EVerticalState::eNOT_CONNECTED };
+                    IAsioService& m_service;
+                    VerticalClientSettings m_configuration;
+
+                    std::unique_ptr<IClientSocket> m_upSocket;
+                    std::unique_ptr<ISerializer> m_upSerializer;
+                    Optional<SupervisoryServiceDescriptionData> m_optionalPeerServiceDescriptionData;
+                    ConnectionInfo m_peerConnectionInfo;
+
                     CallbackReference<ISessionCallback> m_pCallback;
             };
 
@@ -215,35 +244,16 @@ namespace Hermes
             {
             }
 
-            unsigned Session::Id() const { return m_spImpl->m_id; }
-            const Optional<SupervisoryServiceDescriptionData>& Session::OptionalPeerServiceDescriptionData() const
-            {
-                return m_spImpl->m_optionalPeerServiceDescriptionData;
-            }
-
-            const ConnectionInfo& Session::PeerConnectionInfo() const { return m_spImpl->m_peerConnectionInfo; }
+            unsigned Session::Id() const { return m_spImpl->Id(); }
+            const Optional<SupervisoryServiceDescriptionData>& Session::OptionalPeerServiceDescriptionData() const { return m_spImpl->OptionalPeerServiceDescriptionData(); }
+            const ConnectionInfo& Session::PeerConnectionInfo() const { return m_spImpl->PeerConnectionInfo(); }
 
             void Session::Connect()
             {
                 m_spImpl->Connect(m_callback);
             }
 
-            void Session::Signal(const SupervisoryServiceDescriptionData&, StringView rawXml)
-            {
-                switch (m_spImpl->m_state)
-                {
-                case EVerticalState::eSOCKET_CONNECTED:
-                    m_spImpl->m_state = EVerticalState::eSUPERVISORY_SERVICE_DESCRIPTION;
-                    m_spImpl->m_upSerializer->Signal(rawXml);
-                    return;
-
-                default:
-                    if (m_spImpl->DisconnectedDueToIllegalClientEvent_("ServiceDescription"))
-                        return;
-                    m_spImpl->m_upSerializer->Signal(rawXml);
-                }
-            }
-
+            void Session::Signal(const SupervisoryServiceDescriptionData& in_data, StringView rawXml) { m_spImpl->Signal(in_data, rawXml); }
             void Session::Signal(const SendWorkOrderInfoData&, StringView rawXml) { m_spImpl->Signal_(rawXml); }
             void Session::Signal(const SetConfigurationData&, StringView rawXml) { m_spImpl->Signal_(rawXml); }
             void Session::Signal(const GetConfigurationData&, StringView rawXml) { m_spImpl->Signal_(rawXml); }
@@ -253,15 +263,7 @@ namespace Hermes
 
             void Session::Disconnect()
             {
-                switch (m_spImpl->m_state)
-                {
-                case EVerticalState::eDISCONNECTED:
-                    return;
-
-                default:
-                    m_spImpl->m_state = EVerticalState::eDISCONNECTED;
-                    m_spImpl->m_upSerializer->Disconnect();
-                }
+                m_spImpl->Disconnect();
             }
         }
     }
